@@ -41,7 +41,7 @@ A HDF5 file can be imported to [Matlab](https://www.mathworks.com/help/matlab/hi
 
 * ellip, inclusion parameters, see esh3d.py for explanation; 
 * ocoord, evaluation locations (x,y,z km); 
-* odat, evaluation data, column 1~3 displacement (ux,uy,yz m); column 4~9 stress (s11,s22,s33,s12,s23,s33 Pa); 
+* odat, evaluation data, column 1-3 displacement (ux,uy,yz m); column 4-9 stress (s11,s22,s33,s12,s23,s33 Pa); 
 
 Additionally, if the "half" option is on  
 
