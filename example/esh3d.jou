@@ -1,0 +1,22 @@
+${Units('si')}
+undo off
+reset
+Set Duplicate Block Elements on
+brick x 40. y 40. z 30.
+volume 1 move x 0 y 0 z -15.
+volume all size 0.5
+mesh volume all
+nodeset 1 surface 4 
+sideset 1 surface 4
+nodeset 2 surface 6 
+sideset 2 surface 6
+nodeset 3 surface 3 
+sideset 3 surface 3
+nodeset 4 surface 5 
+sideset 4 surface 5
+nodeset 5 surface 2 
+sideset 5 surface 2
+nodeset 6 surface 1 
+sideset 6 surface 1
+export mesh "esh3d.exo" dimension 3 overwrite
+quit
