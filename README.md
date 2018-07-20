@@ -1,5 +1,5 @@
 # Esh3D, a semi-analytical-numerical approach to full and half space inclusion problems.
-[img](https://github.com/Chunfang/Esh3D/blob/master/Esh3D.png)  
+![img](https://github.com/Chunfang/Esh3D/blob/master/Esh3D.png)  
 Corresponding author: Chunfang Meng ( cmeng (at) mit.edu )  
 Contributors: Pradeep Sharma ( psharma (at) uh.edu ), Will Heltsley and Tabrez Ali ( tabrez.ali (at) gmail.com )
 
