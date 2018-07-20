@@ -17,7 +17,7 @@ This is Fortran version of the Matlab code (included) for triaxial Eshebly's sol
 
 ## Eshelby vs Okada  
 * Eshelby allows full (eigen) strain tensor.
-* The semi-numerical-analytical approach to half space solution allows tomographical surface. 
+* The semi-numerical-analytical approach to half space solution allows non-planar surface. 
 * Slightly more expensive if the numerical (FEM) routine is engaged. 
 
 ## INSTALL 
