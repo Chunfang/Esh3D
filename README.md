@@ -2,6 +2,7 @@
 <p align="center">
 <img src="https://github.com/Chunfang/Esh3D/blob/master/Esh3D.png" height="50%" width="50%">
 </p>
+
 Corresponding author: Chunfang Meng ( cmeng (at) mit.edu )  
 Contributors: Pradeep Sharma ( psharma (at) uh.edu ), Will Heltsley and Tabrez Ali ( tabrez.ali (at) gmail.com )
 
