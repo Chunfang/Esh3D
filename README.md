@@ -9,7 +9,7 @@ Contributors: Pradeep Sharma ( psharma (at) uh.edu ), Will Heltsley and Tabrez A
 This is Fortran version of the Matlab code (included) for triaxial Eshebly's solution evaluation. Numerical part of the code is derived from [Defmod](https://bitbucket.org/stali/defmod/wiki/Home) and [Defmod-SWPC](https://github.com/Chunfang/defmod-swpc). Improvements over the original code are  
 
 * runs much quicker;  
-* allow arbitrary number of inclusions;   
+* allows arbitrary number of inclusions;   
 * (optionally) applies numerical traction cancellation to obtain half space solutions.  
 
 ## Eshelby vs Okada  
