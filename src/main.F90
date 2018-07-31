@@ -275,6 +275,10 @@ program main
      read(10,*)ellip(i,:) 
      ellip(i,1:6)=km2m*ellip(i,1:6) ! Centroids and semi-axises
   end do
+  do i=1,nrect
+      read(10,*)rect(i,:)
+      rect(i,1:5)=km2m*rect(i,1:5)
+  end do
   do i=1,nobs
      read(10,*)ocoord(i,:) 
      ocoord(i,:)=km2m*ocoord(i,:)
@@ -290,9 +294,21 @@ program main
      if (rank==nprcs-1) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
      call VecDuplicate(Vec_U,Vec_F,ierr)
      allocate(surfdat(nsurf_loc,18)); surfdat=f0
+
+     ! Find the topography thickness
+     if (nsurf_loc>0) then
+        val=minval(surfloc(:,3))
+     else
+        val=f0
+     end if
+     call MPI_AllReduce(val,top,1,MPI_Real8,MPI_Max,MPI_Comm_World,ierr)
+
      ! Full space solution at "free" surface 
      if (nsurf_loc>0) then 
         call EshSol(mat(1),mat(2),rstress,ellip,surfloc,surfdat(:,:9))
+        if (nrect>0) then ! Add Okada fault solution
+            call OkSol(mat(1),mat(2),rect,surfloc,top,surfdat(:,:9))
+        end if
         surfdat(:,10:)=surfdat(:,:9)
      end if
      call FreeSurfTrac
@@ -345,6 +361,9 @@ program main
      call GetObsNd; allocate(odat(nobs_loc,18)); odat=f0
      if (nobs_loc>0) then
         call EshSol(mat(1),mat(2),rstress,ellip,ocoord_loc,odat(:,:9)) 
+        if (nrect>0) then ! Add Okada fault solution
+            call OkSol(mat(1),mat(2),rect,ocoord_loc,top,odat(:,:9))
+        end if 
         odat(:,10:)=odat(:,:9)
      end if
      ! Initial residual traction
@@ -391,8 +410,8 @@ contains
     read(10,*)stype
     if (stype=="full") half=.false.
     if (stype=="half") half=.true.
-    read(10,*)nellip,nobs
-    if (k==0) allocate(ocoord(nobs,3),ellip(nellip,17))
+    read(10,*)nellip,nrect,nobs
+    if (k==0) allocate(ocoord(nobs,3),ellip(nellip,17),rect(nrect,9))
     if (half) then
        read(10,*)eltype,nodal_bw 
        read(10,*)nels,nnds,nabs,nsurf,frq

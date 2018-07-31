@@ -4,7 +4,7 @@ import sys, os
 
 fin = sys.argv[1]
 fout = fin.rsplit('.')[0] + '.inp'
-half=False
+half=True
 vp=6000.;vs=3464.;rho=2670
 Em=rho*vs**2*(3*vp**2-4*vs**2)/(vp**2-vs**2)
 vm=(vp**2-2*vs**2)/2/(vp**2-vs**2)
@@ -53,25 +53,48 @@ else:
 # ellip(nellip,17): 1-3 ellipsoid centroid coordinate, 4-6 semi-axises, 7-9
 # rotation angles around x,y and z axises, 10,11 inclusion Young's modulus 
 # and Poisson's ratio, 12-17 eigen strain
-ellip=np.array([[0.,0.,-10.,3.,2.E-4,1.,0.,0.,0.,Em,vm,0.,0.,0.,0.1,0.,0.],     
-                [0.,0.,-20.,3.,2.E-4,1.,0.,0.,0.,Em,vm,0.,0.,0.,-0.1,0.,0.],
-                [0.,0.,-10.,3.,2.,1.,0.,0., np.pi/4.,Em,vm,0.,0.,.001,0.,0.,0.],
-                [0.,0.,-20.,3.,2.,1.,0.,0.,-np.pi/4.,Em,vm,0.,0.,-.001,0.,0.,0.]],dtype=np.float64)
+ellip=np.array([[0.,0.,-15.25,3.,2.,1.,0.,0.,0.,Em,vm,0.,0.,.001,0.,0.,0.],
+                [0.,0.,-15.25,3.,2.,1.E-3,0.,-np.pi/2.,0.,Em,vm,0.,0.,0,0.,0.1*0,0.],
+                [-2.,0.,-15.25,3.,2.,1.,0.,0.,0.,Em,vm,.001,.001,.001,0.,0.,0.],
+                [2.,2.,-15.25,3.,2.,1.E-3,0.,-np.pi/3.,0.,Em,vm,0.,0.,0.,0.,0.,-.1]],
+                 dtype=np.float64)
+ellip=ellip[[1],:]
+#ellip=np.array([[0.,0.,-15.25,3.,2.,1E-3,0.,0.,0.,Em,vm,0.,0.,.1*0,0.,0.,0.]])   
 nellip=len(ellip)
-ocoord=np.array([[0.25,0.25,-30.],
-                 [0.25,0.25,-25.],
-                 [0.25,0.25,-20.],
-                 [0.25,0.25,-15.],
-                 [0.25,0.25,-10.],
-                 [0.25,0.25, -5.],
-                 [0.25,0.25,  0.]],dtype=np.float64)
 
+# Okada faults
+m=60; n=40; dx=6./m; dy=4./n; x0=-3.+dx/2.; y0=-2+dy/2; a1=3.; a2=2; a3=1E-3; dip=np.pi/2.
+rects=np.empty((m*n,9),dtype=np.float64)
+k=0
+for i in range(m):
+    for j in range(n):
+        x=x0+i*dx; y=y0+j*dy
+        if x**2/a1**2+y**2/a2**2<1:
+            thick=2.*a3*np.sqrt(1-x**2/a1**2-y**2/a2**2)
+        else:
+            thick=0.
+        x=np.cos(dip)*x; z=-15.25+np.sin(dip)*x 
+        rects[k,:]=[x,y,z,dy,dx,dip,-2.*thick*0.1*1E3,0.,0.]
+        k+=1
+#rects=np.array([[0.,0.,-15.25,4,6,90,0,0,0.1]]) 
+nrect=len(rects)
+
+# Observation grid
+m=40; n=30
+ocoord=np.empty((m*n,3),dtype=np.float64)
+x0=-20.5; x1=20.5; z0=-30.25; z1=0.
+x=x0; z=z0; dx=1.; dz=1.
+for i in range(m):
+    x+=dx; z=z0
+    for j in range(n):
+        z+=dz
+        ocoord[i*n+j,:]=[x,0.,z]
 nobs=len(ocoord)
 if os.path.isfile(fout): os.remove(fout)
 f = open(fout, 'a')
 print 'writing to '+fout+' ...'
 np.savetxt(f, line1, fmt='%s')
-np.savetxt(f,np.array([[nellip,nobs]],dtype=np.float64),fmt='%g '*2)
+np.savetxt(f,np.array([[nellip,nrect,nobs]],dtype=np.float64),fmt='%d '*3)
 if half:
     tol=1E1 # Tolerant traction
     ntol=10 # max iterations
@@ -87,5 +110,6 @@ else:
     np.savetxt(f,mat,fmt='%g '*2)
 np.savetxt(f,stress,fmt='%g '*6)
 np.savetxt(f,ellip,delimiter=' ',fmt='%g '*17) 
+if nrect>0 and half: np.savetxt(f,rects,delimiter=' ',fmt='%g '*9)
 np.savetxt(f,ocoord,delimiter=' ',fmt='%g '*3)
 f.close()

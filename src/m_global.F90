@@ -17,15 +17,15 @@ module global
 #endif
   ! Global variables
   integer :: nnds,nels,nmts,nfrcs,ntrcs,nabs,nsurf,frq,dsp,steps,tstep,nobs,   &
-     nobs_loc,nellip,nsurf_loc,dir,nabs_loc,ntol
-  real(8) :: alpha,beta,t,dt,rfrac,val,rstress(6),tol
+     nobs_loc,nellip,nrect,nsurf_loc,dir,nabs_loc,ntol
+  real(8) :: alpha,beta,t,dt,rfrac,val,top,rstress(6),tol
   integer,allocatable :: nodes(:,:),work(:),fnode(:),telsd(:,:),onlst(:,:),    &
      surfel_glb(:),surfel(:),surfid_glb(:),surfid(:),idface(:),absel_glb(:),   &
      absel(:),absid_glb(:),absid(:),absdir_glb(:),absdir(:),oel(:)
   real(8),allocatable :: coords(:,:),mat(:),stress(:,:,:),vvec(:),ocoord(:,:), &
      ocoord_loc(:,:),ellip(:,:),oshape(:,:),surfloc_glb(:,:),surfloc(:,:),     &
      surfdat(:,:),surfmat_glb(:,:),surfmat(:,:),surf_glb(:),surfdat_glb(:,:),  &
-     surf(:),resid(:),odat_glb(:,:),odat(:,:)
+     surf(:),resid(:),odat_glb(:,:),odat(:,:),rect(:,:)
   real(8),allocatable,target :: uu(:),tot_uu(:)
   character(4) :: stype
   character(256) :: output_file

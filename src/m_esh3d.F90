@@ -416,7 +416,7 @@ contains
        eigent(6,1),Ch(6,6),dC(6,6),vert(3,1),D4(3,3,3,3),fderphi(3),           &
        tderpsi(3,3,3),disp(3),dispt(3,1),Ttmp(3,3),Vtmp(6,1),Teigen(3,3),S4(6,6)
     nobs=size(ocoord,1); nellip=size(ellip,1)
-    sol=f0 ! Initial solution space
+    !sol=f0 ! Initial solution space
     do i=1,nellip
        a=ellip(i,4:6)
        ! Stage a1>=a2>=a3
@@ -448,8 +448,9 @@ contains
        stresst(:,1)=(/Tstress(1,1),Tstress(2,2),Tstress(3,3),Tstress(1,2),     &
                     Tstress(2,3),Tstress(1,3)/)    
        call Vec2Mat(ellip(i,12:17),Teigen)    
-       Teigen=matmul(matmul(matmul(R_init,Rb),Teigen),                         &
-              transpose(matmul(R_init,Rb)))
+       !Teigen=matmul(matmul(matmul(R_init,Rb),Teigen),                         &
+       !       transpose(matmul(R_init,Rb)))
+       Teigen=matmul(matmul(R_init,Teigen),transpose(R_init))
        eigent(:,1)=(/Teigen(1,1),Teigen(2,2),Teigen(3,3),Teigen(1,2),          &
                    Teigen(2,3),Teigen(1,3)/) 
        Eh=ellip(i,10); vh=ellip(i,11)
@@ -466,6 +467,7 @@ contains
           dispt(:,1)=disp
           ! Rotate back
           dispt=matmul(matmul(R,Rb_init),dispt)
+          !dispt=matmul(transpose(matmul(R_init,Rb)),dispt)
           ! Record displacement
           sol(j,:3)=sol(j,:3)+dispt(:,1)
           if (vert(1,1)**2/a(1)**2+vert(2,1)**2/a(2)**2+vert(3,1)**2/a(3)**2   &
@@ -496,8 +498,60 @@ contains
                        Tstress(1,2),Tstress(2,3),Tstress(1,3)/) 
           ! Record stress         
           sol(j,4:9)=sol(j,4:9)+stresst(:,1)
-          stresst(:,1)=stress ! Rest to background stress 
+          stresst(:,1)=stress ! Reset to background stress 
        end do ! nobs
     end do ! nellip
   end subroutine EshSol    
+
+  subroutine OkSol(E,v,rects,ocoord,crest,sol) 
+    ! Okada wrapper for multiple rectangle faults
+    ! E, nu: elastic moduli;
+    ! rects: (nrect,9) 1~3 fault center (x,y,z); 4,5 fault length in strike    
+    ! and dip; 6 dip angle (rad); 7~9 strike (left lateral+) dip
+    ! (up+) and tensile (open) dislocations;
+    ! ocoord: (nobs_loc,3) observation locations;
+    ! crest: topography height;
+    ! sol: (nobs_loc,9) ux ... yz, sigma_xx .. sigma_xz 
+
+    integer :: nobs,nrect,i,j,iret
+    real(8) :: E,v,nu,lbd,alpha,rects(:,:),ocoord(:,:),crest,sol(:,:),x,y,z,   &
+       deep, ux,uy,uz,exx,eyy,ezz,exy,eyz,exz,eyx,ezy,ezx,strain(6,1),         &
+       stress(6,1),Cm(6,6),vectmp(3,1),R(3,3),tenstmp(3,3),ang(3)
+    call CMat(E,v,Cm)
+    nu=E/f2/(1+v)
+    lbd=E*v/(f1+v)/(f1-f2*v)
+    alpha=(lbd+nu)/(lbd+f2*nu)
+    nrect=size(rects,1); nobs=size(ocoord,1)
+    ang=(/f0,f0,pi/f2/)
+    call Ang2Mat(ang,R,f1)
+    do i=1,nrect
+       do j=1,nobs 
+          x=ocoord(j,1)-rects(i,1) 
+          y=ocoord(j,2)-rects(i,2)
+          z=ocoord(j,3)-crest         ! Adjust height against crest 
+          deep=-(rects(i,3)-crest)    ! deep positive
+          ! Translate to Okada coordinate
+          vectmp(:,1)=(/x,y,z/) 
+          vectmp=matmul(R,vectmp) 
+          x=vectmp(1,1); y=vectmp(2,1); z=vectmp(3,1)
+          call dc3d(alpha,x,y,z,deep,rects(i,6)*1.8D2/pi,rects(i,4)/f2,        &
+             rects(i,4)/f2,rects(i,5)/f2,rects(i,5)/f2,rects(i,7),rects(i,8),  &
+             rects(i,9),ux,uy,uz,exx,eyx,ezx,exy,eyy,ezy,exz,eyz,ezz,iret)
+          ! Translate back to Eshelby coordinate
+          vectmp(:,1)=(/ux,uy,uz/) 
+          vectmp=matmul(transpose(R),vectmp)  
+          ux=vectmp(1,1); uy=vectmp(2,1); uz=vectmp(3,1)
+          tenstmp=reshape((/exx,eyx,ezx,exy,eyy,ezy,exz,eyz,ezz/),(/3,3/),     &
+                          (/f0,f0/),(/2,1/))  
+          tenstmp=matmul(matmul(transpose(R),tenstmp),R)
+          strain(:,1)=(/tenstmp(1,1),tenstmp(2,2),tenstmp(3,3),(tenstmp(1,2)+  &
+                        tenstmp(2,1))/f2,(tenstmp(2,3)+tenstmp(3,2))/f2,       &
+                        (tenstmp(1,3)+tenstmp(3,1))/f2/)
+          stress=matmul(Cm,strain)
+          sol(j,:3)=sol(j,:3)+(/ux,uy,uz/)
+          sol(j,4:9)=sol(j,4:9)+stress(:,1)
+       end do
+    end do
+  end subroutine OkSol  
+
 end module esh3d

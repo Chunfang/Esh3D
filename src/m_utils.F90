@@ -1545,11 +1545,11 @@ contains
     implicit none  
     real(8) :: ang(3),matrot(3,3),Rx(3,3),Ry(3,3),Rz(3,3),order
     ang=order*ang
-    Rx=reshape((/f1,f0,f0,f0,cos(ang(1)),-sin(ang(1)),f0,sin(ang(1)),       &
+    Rx=reshape((/f1,f0,f0,f0,cos(ang(1)),-sin(ang(1)),f0,sin(ang(1)),          &
        cos(ang(1))/),(/3,3/),(/f0,f0/),(/2,1/))
-    Ry=reshape((/cos(ang(2)),f0,sin(ang(2)),f0,f1,f0,-sin(ang(2)),f0,       &
+    Ry=reshape((/cos(ang(2)),f0,sin(ang(2)),f0,f1,f0,-sin(ang(2)),f0,          &
        cos(ang(2))/),(/3,3/),(/f0,f0/),(/2,1/))
-    Rz=reshape((/cos(ang(3)),-sin(ang(3)),f0,sin(ang(3)),cos(ang(3)),       &
+    Rz=reshape((/cos(ang(3)),-sin(ang(3)),f0,sin(ang(3)),cos(ang(3)),          &
        f0,f0,f0,f1/),(/3,3/),(/f0,f0/),(/2,1/))
     if (order>f0) then
        matrot=matmul(matmul(Rz,Ry),Rx)
@@ -1557,5 +1557,499 @@ contains
        matrot=matmul(matmul(Rx,Ry),Rz)
     end if
   end subroutine Ang2Mat
+
+  subroutine dc3d(alpha,x,y,z,depth,dip,al1,al2,aw1,aw2,disl1,disl2,disl3,ux,  &
+     uy,uz,uxx,uyx,uzx,uxy,uyy,uzy,uxz,uyz,uzz,iret)
+    ! Yoshimitsu Okada's routine(s) with minor modifications
+    ! - Please cite "Okada Y., Internal deformation due to shear and tensile
+    !   faults in a half-space, BSSA, 82, 1018-1040, 1992"
+
+    !'dc3d' calculates displacements/strains at depth due to a buried finite fault
+    !
+    !INPUT
+    !   alpha : medium constant  (lambda+mu)/(lambda+2*mu)
+    !   x,y,z : coordinate of observing point
+    !   depth : source depth
+    !   dip   : dip-angle (degree)
+    !   al1,al2     : fault length (-strike,+strike)
+    !   aw1,aw2     : fault width  ( downdip, updip)
+    !   disl1-disl3 : strike-, dip-, tensile-dislocations
+    !
+    !OUTPUT
+    !   ux, uy, uz  : displacement (unit=(unit of disl))
+    !   uxx,uyx,uzx : x-derivative (unit=(unit of disl) /
+    !                              (unit of x,y,z,depth,al,aw))
+    !   uxy,uyy,uzy : y-derivative
+    !   uxz,uyz,uzz : z-derivative
+    !   iret        : return code  (=0.... normal,   =1.... singular)
+
+    implicit real(8) (a-h,o-z)
+    real(8) alpha,x,y,z,depth,dip,al1,al2,aw1,aw2,disl1,disl2,disl3,ux,uy,uz,  &
+       uxx,uyx,uzx,uxy,uyy,uzy,uxz,uyz,uzz
+    integer iret
+    common /c0/dummy(5),sd,cd,dummy2(5)
+    common /c2/xi2,et2,q2,r,dummy3(20)
+    dimension u(12),du(12),dua(12),dub(12),duc(12)
+    !data f0/0.0d0/
+    integer :: i,j,k,jxi,jet
+    if(z.gt.0.0d0) write(6,'('' Positive z was given in sub-dc3d'')')
+    do i=1,12
+       u  (i)=f0
+       dua(i)=f0
+       dub(i)=f0
+       duc(i)=f0
+    end do
+    aalpha=alpha
+    ddip=dip
+    call dccon0(aalpha,ddip)
+    ! Real source contribution
+    d=depth+z
+    p=y*cd+d*sd
+    q=y*sd-d*cd
+    jxi=0
+    jet=0
+    if((x+al1)*(x-al2).le.0.0d0) jxi=1
+    if((p+aw1)*(p-aw2).le.0.0d0) jet=1
+    dd1=disl1
+    dd2=disl2
+    dd3=disl3
+    do k=1,2
+       if(k.eq.1) et=p+aw1
+       if(k.eq.2) et=p-aw2
+       do j=1,2
+          if(j.eq.1) xi=x+al1
+          if(j.eq.2) xi=x-al2
+          call dccon2(xi,et,q,sd,cd)
+          if(jxi.eq.1 .and. q.eq.f0 .and. et.eq.f0) go to 99
+          if(jet.eq.1 .and. q.eq.f0 .and. xi.eq.f0) go to 99
+          call ua(xi,et,q,dd1,dd2,dd3,dua)
+          do i=1,10,3
+             du(i)  =-dua(i)
+             du(i+1)=-dua(i+1)*cd+dua(i+2)*sd
+             du(i+2)=-dua(i+1)*sd-dua(i+2)*cd
+             if(i.lt.10) cycle
+             du(i)  =-du(i)
+             du(i+1)=-du(i+1)
+             du(i+2)=-du(i+2)
+          end do
+          do i=1,12
+             if(j+k.ne.3) u(i)=u(i)+du(i)
+             if(j+k.eq.3) u(i)=u(i)-du(i)
+          end do
+       end do
+    end do
+    ! Image source contribution
+    zz=z
+    d=depth-z
+    p=y*cd+d*sd
+    q=y*sd-d*cd
+    jet=0
+    if((p+aw1)*(p-aw2).le.0.0d0) jet=1
+    do k=1,2
+       if(k.eq.1) et=p+aw1
+       if(k.eq.2) et=p-aw2
+       do j=1,2
+          if(j.eq.1) xi=x+al1
+          if(j.eq.2) xi=x-al2
+          call dccon2(xi,et,q,sd,cd)
+          call ua(xi,et,q,dd1,dd2,dd3,dua)
+          call ub(xi,et,q,dd1,dd2,dd3,dub)
+          call uc(xi,et,q,zz,dd1,dd2,dd3,duc)
+          do i=1,10,3
+             du(i)=dua(i)+dub(i)+z*duc(i)
+             du(i+1)=(dua(i+1)+dub(i+1)+z*duc(i+1))*cd-(dua(i+2)+dub(i+2)+     &
+                z*duc(i+2))*sd
+             du(i+2)=(dua(i+1)+dub(i+1)-z*duc(i+1))*sd+(dua(i+2)+dub(i+2)-     &
+                z*duc(i+2))*cd
+             if(i.lt.10) cycle
+             du(10)=du(10)+duc(1)
+             du(11)=du(11)+duc(2)*cd-duc(3)*sd
+             du(12)=du(12)-duc(2)*sd-duc(3)*cd
+          end do
+          do i=1,12
+             if(j+k.ne.3) u(i)=u(i)+du(i)
+             if(j+k.eq.3) u(i)=u(i)-du(i)
+          end do
+       end do
+    end do
+    ux=u(1)
+    uy=u(2)
+    uz=u(3)
+    uxx=u(4)
+    uyx=u(5)
+    uzx=u(6)
+    uxy=u(7)
+    uyy=u(8)
+    uzy=u(9)
+    uxz=u(10)
+    uyz=u(11)
+    uzz=u(12)
+    iret=0
+    return
+    ! In case singular (r=0)
+99  ux=f0
+    uy=f0
+    uz=f0
+    uxx=f0
+    uyx=f0
+    uzx=f0
+    uxy=f0
+    uyy=f0
+    uzy=f0
+    uxz=f0
+    uyz=f0
+    uzz=f0
+    iret=1
+    return
+  end subroutine dc3d
+
+  subroutine dccon0(alpha,dip)
+    implicit real(8) (a-h,o-z)
+    common /c0/alp1,alp2,alp3,alp4,alp5,sd,cd,sdsd,cdcd,sdcd,s2d,c2d
+    !data f0,f1,f2,pi2/0.0d0,1.0d0,2.0d0,6.283185d0/
+    data pi2/6.283185d0/
+    data eps/1.0e-6/
+    alp1=(f1-alpha)/f2
+    alp2=alpha/f2
+    alp3=(f1-alpha)/alpha
+    alp4=f1-alpha
+    alp5=alpha
+    p18=pi2/360.0d0
+    sd=sin(dip*p18)
+    cd=cos(dip*p18)
+    if(abs(cd).lt.eps) then
+       cd=f0
+       if(sd.gt.f0) sd= f1
+       if(sd.lt.f0) sd=-f1
+    endif
+    sdsd=sd*sd
+    cdcd=cd*cd
+    sdcd=sd*cd
+    s2d=f2*sdcd
+    c2d=cdcd-sdsd
+    return
+  end subroutine dccon0
+
+  subroutine ua(xi,et,q,disl1,disl2,disl3,u)
+    implicit real(8) (a-h,o-z)
+    dimension u(12),du(12)
+    common /c0/alp1,alp2,alp3,alp4,alp5,sd,cd,sdsd,cdcd,sdcd,s2d,c2d
+    common /c2/xi2,et2,q2,r,r2,r3,r5,y,d,tt,alx,ale,x11,y11,x32,y32,ey,ez,fy,  &
+       fz,gy,gz,hy,hz
+    !data f0,f2,pi2/0.0d0,2.0d0,6.283185d0/
+    data pi2/6.283185d0/
+    integer :: i
+    do i=1,12
+       u(i)=f0
+    end do
+    xy=xi*y11
+    qx=q*x11
+    qy=q*y11
+    ! Strike slip contribution
+    if(disl1.ne.f0) then
+       du( 1)= tt/f2+alp2*xi*qy
+       du( 2)= alp2*q/r
+       du( 3)= alp1*ale-alp2*q*qy
+       du( 4)=-alp1*qy-alp2*xi2*q*y32
+       du( 5)=-alp2*xi*q/r3
+       du( 6)= alp1*xy+alp2*xi*q2*y32
+       du( 7)= alp1*xy*sd+alp2*xi*fy+d/f2*x11
+       du( 8)= alp2*ey
+       du( 9)= alp1*(cd/r+qy*sd)-alp2*q*fy
+       du(10)= alp1*xy*cd+alp2*xi*fz+y/f2*x11
+       du(11)= alp2*ez
+       du(12)=-alp1*(sd/r-qy*cd)-alp2*q*fz
+       do i=1,12
+          u(i)=u(i)+disl1/pi2*du(i)
+       end do
+    endif
+    ! Dip slip contribution
+    if(disl2.ne.f0) then
+       du( 1)= alp2*q/r
+       du( 2)= tt/f2+alp2*et*qx
+       du( 3)= alp1*alx-alp2*q*qx
+       du( 4)=-alp2*xi*q/r3
+       du( 5)=-qy/f2-alp2*et*q/r3
+       du( 6)= alp1/r+alp2*q2/r3
+       du( 7)= alp2*ey
+       du( 8)= alp1*d*x11+xy/f2*sd+alp2*et*gy
+       du( 9)= alp1*y*x11-alp2*q*gy
+       du(10)= alp2*ez
+       du(11)= alp1*y*x11+xy/f2*cd+alp2*et*gz
+       du(12)=-alp1*d*x11-alp2*q*gz
+       do i=1,12
+          u(i)=u(i)+disl2/pi2*du(i)
+       end do
+    endif
+    ! Tensile fault contribution
+    if(disl3.ne.f0) then
+       du( 1)=-alp1*ale-alp2*q*qy
+       du( 2)=-alp1*alx-alp2*q*qx
+       du( 3)= tt/f2-alp2*(et*qx+xi*qy)
+       du( 4)=-alp1*xy+alp2*xi*q2*y32
+       du( 5)=-alp1/r+alp2*q2/r3
+       du( 6)=-alp1*qy-alp2*q*q2*y32
+       du( 7)=-alp1*(cd/r+qy*sd)-alp2*q*fy
+       du( 8)=-alp1*y*x11-alp2*q*gy
+       du( 9)= alp1*(d*x11+xy*sd)+alp2*q*hy
+       du(10)= alp1*(sd/r-qy*cd)-alp2*q*fz
+       du(11)= alp1*d*x11-alp2*q*gz
+       du(12)= alp1*(y*x11+xy*cd)+alp2*q*hz
+       do i=1,12
+          u(i)=u(i)+disl3/pi2*du(i)
+       end do
+    endif
+    return
+  end subroutine ua
+
+  subroutine ub(xi,et,q,disl1,disl2,disl3,u)
+    implicit real(8) (a-h,o-z)
+    dimension u(12),du(12)
+    common /c0/alp1,alp2,alp3,alp4,alp5,sd,cd,sdsd,cdcd,sdcd,s2d,c2d
+    common /c2/xi2,et2,q2,r,r2,r3,r5,y,d,tt,alx,ale,x11,y11,x32,y32,ey,ez,fy,  &
+       fz,gy,gz,hy,hz
+    !data f0,f1,f2,pi2/0.0d0,1.0d0,2.0d0,6.283185d0/
+    data pi2/6.283185d0/
+    integer :: i
+    rd=r+d
+    d11=f1/(r*rd)
+    aj2=xi*y/rd*d11
+    aj5=-(d+y*y/rd)*d11
+    if(cd.ne.f0) then
+       if(xi.eq.f0) then
+          ai4=f0
+       else
+          x=sqrt(xi2+q2)
+          ai4=f1/cdcd*(xi/rd*sdcd+f2*atan((et*(x+q*cd)+x*(r+x)*sd)/            &
+             (xi*(r+x)*cd)))
+       endif
+       ai3=(y*cd/rd-ale+sd*log(rd))/cdcd
+       ak1=xi*(d11-y11*sd)/cd
+       ak3=(q*y11-y*d11)/cd
+       aj3=(ak1-aj2*sd)/cd
+       aj6=(ak3-aj5*sd)/cd
+    else
+       rd2= rd*rd
+       ai3=(et/rd+y*q/rd2-ale)/f2
+       ai4= xi*y/rd2/f2
+       ak1= xi*q/rd*d11
+       ak3= sd/rd*(xi2*d11-f1)
+       aj3=-xi/rd2*(q2*d11-f1/f2)
+       aj6=-y/rd2*(xi2*d11-f1/f2)
+    endif
+    xy=xi*y11
+    ai1=-xi/rd*cd-ai4*sd
+    ai2= log(rd)+ai3*sd
+    ak2= f1/r+ak3*sd
+    ak4= xy*cd-ak1*sd
+    aj1= aj5*cd-aj6*sd
+    aj4=-xy-aj2*cd+aj3*sd
+    do i=1,12
+       u(i)=f0
+    end do
+    qx=q*x11
+    qy=q*y11
+    ! Strike slip contribution
+    if(disl1.ne.f0) then
+       du( 1)=-xi*qy-tt-alp3*ai1*sd
+       du( 2)=-q/r+alp3*y/rd*sd
+       du( 3)= q*qy-alp3*ai2*sd
+       du( 4)= xi2*q*y32-alp3*aj1*sd
+       du( 5)= xi*q/r3-alp3*aj2*sd
+       du( 6)=-xi*q2*y32-alp3*aj3*sd
+       du( 7)=-xi*fy-d*x11+alp3*(xy+aj4)*sd
+       du( 8)=-ey+alp3*(f1/r+aj5)*sd
+       du( 9)= q*fy-alp3*(qy-aj6)*sd
+       du(10)=-xi*fz-y*x11+alp3*ak1*sd
+       du(11)=-ez+alp3*y*d11*sd
+       du(12)= q*fz+alp3*ak2*sd
+       do i=1,12
+          u(i)=u(i)+disl1/pi2*du(i)
+       end do
+    endif
+    ! Dip slip contribution
+    if(disl2.ne.f0) then
+       du( 1)=-q/r+alp3*ai3*sdcd
+       du( 2)=-et*qx-tt -alp3*xi/rd*sdcd
+       du( 3)= q*qx+alp3*ai4*sdcd
+       du( 4)= xi*q/r3+alp3*aj4*sdcd
+       du( 5)= et*q/r3+qy+alp3*aj5*sdcd
+       du( 6)=-q2/r3+alp3*aj6*sdcd
+       du( 7)=-ey+alp3*aj1*sdcd
+       du( 8)=-et*gy-xy*sd+alp3*aj2*sdcd
+       du( 9)= q*gy+alp3*aj3*sdcd
+       du(10)=-ez-alp3*ak3*sdcd
+       du(11)=-et*gz-xy*cd-alp3*xi*d11*sdcd
+       du(12)= q*gz-alp3*ak4*sdcd
+       do i=1,12
+          u(i)=u(i)+disl2/pi2*du(i)
+       end do
+    endif
+    ! Tensile fault contribution
+    if(disl3.ne.f0) then
+       du( 1)= q*qy-alp3*ai3*sdsd
+       du( 2)= q*qx+alp3*xi/rd*sdsd
+       du( 3)= et*qx+xi*qy-tt-alp3*ai4*sdsd
+       du( 4)=-xi*q2*y32-alp3*aj4*sdsd
+       du( 5)=-q2/r3-alp3*aj5*sdsd
+       du( 6)= q*q2*y32-alp3*aj6*sdsd
+       du( 7)= q*fy-alp3*aj1*sdsd
+       du( 8)= q*gy-alp3*aj2*sdsd
+       du( 9)=-q*hy-alp3*aj3*sdsd
+       du(10)= q*fz+alp3*ak3*sdsd
+       du(11)= q*gz+alp3*xi*d11*sdsd
+       du(12)=-q*hz+alp3*ak4*sdsd
+       do i=1,12
+          u(i)=u(i)+disl3/pi2*du(i)
+       end do
+    endif
+    return
+  end subroutine ub
+
+  subroutine uc(xi,et,q,z,disl1,disl2,disl3,u)
+    implicit real(8) (a-h,o-z)
+    integer :: i
+    dimension u(12),du(12)
+    common /c0/alp1,alp2,alp3,alp4,alp5,sd,cd,sdsd,cdcd,sdcd,s2d,c2d
+    common /c2/xi2,et2,q2,r,r2,r3,r5,y,d,tt,alx,ale,x11,y11,x32,y32,ey,ez,fy,  &
+       fz,gy,gz,hy,hz
+    !data f0,f1,f2,f3,pi2/0.0d0,1.0d0,2.0d0,3.0d0,6.283185d0/
+    data pi2/6.283185d0/
+    c=d+z
+    x53=(8.0d0*r2+9.0d0*r*xi+f3*xi2)*x11*x11*x11/r2
+    y53=(8.0d0*r2+9.0d0*r*et+f3*et2)*y11*y11*y11/r2
+    h=q*cd-z
+    z32=sd/r3-h*y32
+    z53=f3*sd/r5-h*y53
+    y0=y11-xi2*y32
+    z0=z32-xi2*z53
+    ppy=cd/r3+q*y32*sd
+    ppz=sd/r3-q*y32*cd
+    qq=z*y32+z32+z0
+    qqy=f3*c*d/r5-qq*sd
+    qqz=f3*c*y/r5-qq*cd+q*y32
+    xy=xi*y11
+    qx=q*x11
+    qy=q*y11
+    qr=f3*q/r5
+    cqx=c*q*x53
+    cdr=(c+d)/r3
+    yy0=y/r3-y0*cd
+    do i=1,12
+       u(i)=f0
+    end do
+    ! Strike slip contribution
+    if(disl1.ne.f0) then
+       du( 1)= alp4*xy*cd-alp5*xi*q*z32
+       du( 2)= alp4*(cd/r+f2*qy*sd)-alp5*c*q/r3
+       du( 3)= alp4*qy*cd-alp5*(c*et/r3-z*y11+xi2*z32)
+       du( 4)= alp4*y0*cd-alp5*q*z0
+       du( 5)=-alp4*xi*(cd/r3+f2*q*y32*sd)+alp5*c*xi*qr
+       du( 6)=-alp4*xi*q*y32*cd+alp5*xi*(f3*c*et/r5-qq)
+       du( 7)=-alp4*xi*ppy*cd-alp5*xi*qqy
+       du( 8)= alp4*f2*(d/r3-y0*sd)*sd-y/r3*cd-alp5*(cdr*sd-et/r3-c*y*qr)
+       du( 9)=-alp4*q/r3+yy0*sd+alp5*(cdr*cd+c*d*qr-(y0*cd+q*z0)*sd)
+       du(10)= alp4*xi*ppz*cd-alp5*xi*qqz
+       du(11)= alp4*f2*(y/r3-y0*cd)*sd+d/r3*cd-alp5*(cdr*cd+c*d*qr)
+       du(12)= yy0*cd-alp5*(cdr*sd-c*y*qr-y0*sdsd+q*z0*cd)
+       do i=1,12
+          u(i)=u(i)+disl1/pi2*du(i)
+       end do
+    endif
+    ! Dip slip contribution
+    if(disl2.ne.f0) then
+       du( 1)= alp4*cd/r-qy*sd-alp5*c*q/r3
+       du( 2)= alp4*y*x11-alp5*c*et*q*x32
+       du( 3)=-d*x11-xy*sd-alp5*c*(x11-q2*x32)
+       du( 4)=-alp4*xi/r3*cd+alp5*c*xi*qr+xi*q*y32*sd
+       du( 5)=-alp4*y/r3+alp5*c*et*qr
+       du( 6)= d/r3-y0*sd+alp5*c/r3*(f1-f3*q2/r2)
+       du( 7)=-alp4*et/r3+y0*sdsd-alp5*(cdr*sd-c*y*qr)
+       du( 8)= alp4*(x11-y*y*x32)-alp5*c*((d+f2*q*cd)*x32-y*et*q*x53)
+       du( 9)= xi*ppy*sd+y*d*x32+alp5*c*((y+f2*q*sd)*x32-y*q2*x53)
+       du(10)=-q/r3+y0*sdcd-alp5*(cdr*cd+c*d*qr)
+       du(11)= alp4*y*d*x32-alp5*c*((y-f2*q*sd)*x32+d*et*q*x53)
+       du(12)=-xi*ppz*sd+x11-d*d*x32-alp5*c*((d-f2*q*cd)*x32-d*q2*x53)
+       do i=1,12
+          u(i)=u(i)+disl2/pi2*du(i)
+       end do
+    endif
+    ! Tensile fault contribution
+    if(disl3.ne.f0) then
+       du( 1)=-alp4*(sd/r+qy*cd)-alp5*(z*y11-q2*z32)
+       du( 2)= alp4*f2*xy*sd+d*x11-alp5*c*(x11-q2*x32)
+       du( 3)= alp4*(y*x11+xy*cd)+alp5*q*(c*et*x32+xi*z32)
+       du( 4)= alp4*xi/r3*sd+xi*q*y32*cd+alp5*xi*(f3*c*et/r5-f2*z32-z0)
+       du( 5)= alp4*f2*y0*sd-d/r3+alp5*c/r3*(f1-f3*q2/r2)
+       du( 6)=-alp4*yy0-alp5*(c*et*qr-q*z0)
+       du( 7)= alp4*(q/r3+y0*sdcd)+alp5*(z/r3*cd+c*d*qr-q*z0*sd)
+       du( 8)=-alp4*f2*xi*ppy*sd-y*d*x32+alp5*c*((y+f2*q*sd)*x32-y*q2*x53)
+       du( 9)=-alp4*(xi*ppy*cd-x11+y*y*x32)+alp5*(c*((d+f2*q*cd)*x32-          &
+          y*et*q*x53)+xi*qqy)
+       du(10)=-et/r3+y0*cdcd-alp5*(z/r3*sd-c*y*qr-y0*sdsd+q*z0*cd)
+       du(11)= alp4*f2*xi*ppz*sd-x11+d*d*x32-alp5*c*((d-f2*q*cd)*x32-d*q2*x53)
+       du(12)= alp4*(xi*ppz*cd+y*d*x32)+alp5*(c*((y-f2*q*sd)*x32+d*et*q*x53)+  &
+          xi*qqz)
+       do i=1,12
+          u(i)=u(i)+disl3/pi2*du(i)
+       end do
+    endif
+    return
+  end subroutine uc
+
+  subroutine dccon2(xi,et,q,sd,cd)
+    implicit real(8) (a-h,o-z)
+    common /c2/xi2,et2,q2,r,r2,r3,r5,y,d,tt,alx,ale,x11,y11,x32,y32,ey,ez,fy,  &
+       fz,gy,gz,hy,hz
+    !data  f0,f1,f2,eps/0.0d0,1.0d0,2.0d0,1.0e-6/
+    data eps/1.0e-6/
+    if(abs(xi).lt.eps) xi=f0
+    if(abs(et).lt.eps) et=f0
+    if(abs( q).lt.eps)  q=f0
+    xi2=xi*xi
+    et2=et*et
+    q2=q*q
+    r2=xi2+et2+q2
+    r =sqrt(r2)
+    if(r.eq.f0) return
+    r3=r *r2
+    r5=r3*r2
+    y =et*cd+q*sd
+    d =et*sd-q*cd
+    if(q.eq.f0) then
+       tt=f0
+    else
+       tt=atan(xi*et/(q*r))
+    endif
+    if(xi.lt.f0 .and. q.eq.f0 .and. et.eq.f0) then
+       alx=-log(r-xi)
+       x11=f0
+       x32=f0
+    else
+       rxi=r+xi
+       alx=log(rxi)
+       x11=f1/(r*rxi)
+       x32=(r+rxi)*x11*x11/r
+    endif
+    if(et.lt.f0 .and. q.eq.f0 .and. xi.eq.f0) then
+       ale=-log(r-et)
+       y11=f0
+       y32=f0
+    else
+       ret=r+et
+       ale=log(ret)
+       y11=f1/(r*ret)
+       y32=(r+ret)*y11*y11/r
+    endif
+    ey=sd/r-y*q/r3
+    ez=cd/r+d*q/r3
+    fy=d/r3+xi2*y32*sd
+    fz=y/r3+xi2*y32*cd
+    gy=f2*x11*sd-y*q*x32
+    gz=f2*x11*cd+d*q*x32
+    hy=d*q*x32+xi*q*y32*sd
+    hz=y*q*x32+xi*q*y32*cd
+    return
+  end subroutine dccon2
 
 end module utils 
