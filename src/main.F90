@@ -239,9 +239,12 @@ program main
         if (el/=0) then ! Local surf element
            ecoords=coords(nodes(el,:),:)
            call Glb2Face(ecoords,side,surfmat_glb(j,:),idface)
-           surfloc_glb(j,:)=(/sum(ecoords(idface,1)),                          &
-                              sum(ecoords(idface,2)),                          &
-                              sum(ecoords(idface,3))/)/dble(nps)
+           !surfloc_glb(j,:)=(/sum(ecoords(idface,1)),                          &
+           !                   sum(ecoords(idface,2)),                          &
+           !                   sum(ecoords(idface,3))/)/dble(nps)
+           surfloc_glb(j,:)=(/sum(ecoords(:,1)),                               &
+                              sum(ecoords(:,2)),                               &
+                              sum(ecoords(:,3))/)/dble(npel)
            surfel_glb(j)=el 
            surfid_glb(j)=side
            hit(j)=j
@@ -297,9 +300,9 @@ program main
 
      ! Find the topography thickness
      if (nsurf_loc>0) then
-        val=minval(surfloc(:,3))
+        val=maxval(surfloc(:,3))
      else
-        val=f0
+        val=maxval(coords(:,3))
      end if
      call MPI_AllReduce(val,top,1,MPI_Real8,MPI_Max,MPI_Comm_World,ierr)
 

@@ -450,6 +450,7 @@ contains
        call Vec2Mat(ellip(i,12:17),Teigen)    
        !Teigen=matmul(matmul(matmul(R_init,Rb),Teigen),                         &
        !       transpose(matmul(R_init,Rb)))
+       !print*, matmul(S4,eigent)
        Teigen=matmul(matmul(R_init,Teigen),transpose(R_init))
        eigent(:,1)=(/Teigen(1,1),Teigen(2,2),Teigen(3,3),Teigen(1,2),          &
                    Teigen(2,3),Teigen(1,3)/) 
