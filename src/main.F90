@@ -374,7 +374,7 @@ program main
         MPI_Comm_World,ierr)
      if (val<tol) go to 8 
      i=0 
-     do while(.true. .and. i<tol+1)
+     do while(.true. .and. i<ntol+1)
         i=i+1
         call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
         call GetVec_U; tot_uu=tot_uu+uu
