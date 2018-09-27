@@ -1,4 +1,4 @@
-# Esh3D, a semi-analytical-numerical approach to full and half space inclusion problems.
+# Esh3D, a semi-analytical-numerical approach to full and (topographical) half space Eshelby's inclusion problems.
 <p align="center">
 <img src="https://github.com/Chunfang/Esh3D/blob/master/Esh3D.png" height="50%" width="50%">
 </p>
@@ -9,16 +9,19 @@ Contributors: Pradeep Sharma ( psharma (at) uh.edu ), Will Heltsley and Tabrez A
 * * *
 
 ## DESCRIPTION
-This is Fortran version of the Matlab code (included) for triaxial Eshebly's solution evaluation. Numerical part of the code is derived from [Defmod](https://bitbucket.org/stali/defmod/wiki/Home) and [Defmod-SWPC](https://github.com/Chunfang/defmod-swpc). Improvements over the original code are  
+This is a Fortran translation and extension of the Matlab code (Meng et al, 2011) for triaxial Eshebly's solution evaluation. Numerical part of the code is derived from [Defmod](https://bitbucket.org/stali/defmod/wiki/Home) and [Defmod-SWPC](https://github.com/Chunfang/defmod-swpc). 
 
+This code, as an improvement over the original,
 * runs much quicker;  
-* allows arbitrary number of inclusions;   
-* (optionally) applies numerical traction cancellation to obtain half space solutions.  
+* allows arbitrary number of arbitrarily oriented Eshelby's inclusions;   
+* (optionally) applies numerical traction cancellation to obtain topographical half space Eshelby solution;
+* includes a custom (Okada, 1992) subroutine allowing joint Eshelby + Okada models;
+* evaluates Okada solution for topographical surface.
 
 ## Eshelby vs Okada  
-* Eshelby allows full (eigen) strain tensor.
-* The semi-numerical-analytical approach to half space solution allows non-planar surface. 
-* Slightly more expensive if the numerical (FEM) routine is engaged. 
+* Eshelby model, with six-component eigen strain tensors, considers volumetric inclsion transformations.
+* The semi-numerical-analytical approach to half space solution allows non-planar surface.
+* Slightly more expensive if the numerical (FEM) half space correction is engaged.
 
 ## INSTALL 
 * 3rd party package [PETSc](https://www.mcs.anl.gov/petsc) built with [HDF5](https://support.hdfgroup.org/HDF5), e.g. configured with `--download-hdf5`.
