@@ -515,7 +515,7 @@ contains
     ! ocoord: (nobs_loc,3) observation locations;
     ! crest: topography height;
     ! sol: (nobs_loc,9) ux ... yz, sigma_xx .. sigma_xz 
-
+    implicit none
     integer :: nobs,nrect,i,j,iret
     real(8) :: E,v,nu,lbd,alpha,rects(:,:),ocoord(:,:),crest,sol(:,:),x,y,z,   &
        deep, ux,uy,uz,exx,eyy,ezz,exy,eyz,exz,eyx,ezy,ezx,strain(6,1),         &
