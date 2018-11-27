@@ -25,7 +25,7 @@ module global
   real(8),allocatable :: coords(:,:),mat(:),stress(:,:,:),vvec(:),ocoord(:,:), &
      ocoord_loc(:,:),ellip(:,:),oshape(:,:),surfloc_glb(:,:),surfloc(:,:),     &
      surfdat(:,:),surfmat_glb(:,:),surfmat(:,:),surf_glb(:),surfdat_glb(:,:),  &
-     surf(:),resid(:),odat_glb(:,:),odat(:,:),rect(:,:)
+     surf(:),resid(:),odat_glb(:,:),odat(:,:),rect(:,:),surfnrm_glb(:,:)
   real(8),allocatable,target :: uu(:),tot_uu(:)
   character(4) :: stype
   character(256) :: output_file
@@ -632,6 +632,12 @@ contains
        call h5screate_simple_f(2,dim_dat,spc_dat,err)
        call h5dcreate_f(idfile,"scoord",h5t_native_double,spc_dat,iddat,err)
        call h5dwrite_f(iddat,h5t_native_double,transpose(surfloc_glb)/km2m,    &
+          dim_dat,err)
+       call h5dclose_f(iddat,err)
+       ! Surface normal
+       call h5screate_simple_f(2,dim_dat,spc_dat,err)
+       call h5dcreate_f(idfile,"snorm",h5t_native_double,spc_dat,iddat,err)
+       call h5dwrite_f(iddat,h5t_native_double,transpose(surfnrm_glb),         &
           dim_dat,err)
        call h5dclose_f(iddat,err)
        ! Surface data

@@ -5,7 +5,7 @@ module esh3d
 
 contains 
 
-  ! Calculate Is
+  ! ! Eshelby's tensor S(6,6)
   subroutine EshS4(vm,a,S4,PIvec)  
     implicit none  
     real(8) :: vm,a(3),Ifir(3),Isec(3,3),rate,theta,m,B,D,F,E,denom,           &
@@ -68,6 +68,7 @@ contains
        Isec(3,3)=(f4*pi/a(3)**2-Isec(3,1)-Isec(3,2))/f3
     end if
     denom=f8*pi*(f1-vm);
+    S4=f0 ! Sparse tensor
     Sten(1,1,1,1)=(f3*a(1)**2*Isec(1,1)+(f1-2*vm)*Ifir(1))/denom
     Sten(2,2,2,2)=(f3*a(2)**2*Isec(2,2)+(f1-2*vm)*Ifir(2))/denom
     Sten(3,3,3,3)=(f3*a(3)**2*Isec(3,3)+(f1-2*vm)*Ifir(3))/denom
@@ -86,23 +87,24 @@ contains
     Sten(1,3,1,3)=Sten(3,1,3,1)
     ! Original stress order 
     !S4(1,:)=(/Sten(1,1,1,1),f0,f0,Sten(1,1,2,2),f0,Sten(1,1,3,3)/) 
-    !S4(2,:)=(/f0,2*Sten(1,2,1,2),f0,f0,f0,f0/)
-    !S4(3,:)=(/f0,f0,2*Sten(1,3,1,3),f0,f0,f0/)
+    !S4(2,:)=(/f0,f2*Sten(1,2,1,2),f0,f0,f0,f0/)
+    !S4(3,:)=(/f0,f0,f2*Sten(1,3,1,3),f0,f0,f0/)
     !S4(4,:)=(/Sten(2,2,1,1),f0,f0,Sten(2,2,2,2),f0,Sten(2,2,3,3)/)
-    !S4(5,:)=(/f0,f0,f0,f0,2*Sten(2,3,2,3),f0/)
+    !S4(5,:)=(/f0,f0,f0,f0,f2*Sten(2,3,2,3),f0/)
     !S4(6,:)=(/Sten(3,3,1,1),f0,f0,Sten(3,3,2,2),f0,Sten(3,3,3,3)/)
     ! FEM stress order
     S4(1,:)=(/Sten(1,1,1,1),Sten(1,1,2,2),Sten(1,1,3,3),f0,f0,f0/)
     S4(2,:)=(/Sten(2,2,1,1),Sten(2,2,2,2),Sten(2,2,3,3),f0,f0,f0/)
     S4(3,:)=(/Sten(3,3,1,1),Sten(3,3,2,2),Sten(3,3,3,3),f0,f0,f0/)
-    S4(4,:)=(/f0,f0,f0,2*Sten(1,2,1,2),f0,f0/)
-    S4(5,:)=(/f0,f0,f0,f0,2*Sten(2,3,2,3),f0/)
-    S4(6,:)=(/f0,f0,f0,f0,f0,2*Sten(1,3,1,3)/)
+    S4(4,:)=(/f0,f0,f0,f2*Sten(1,2,1,2),f0,f0/)
+    S4(5,:)=(/f0,f0,f0,f0,f2*Sten(2,3,2,3),f0/)
+    S4(6,:)=(/f0,f0,f0,f0,f0,f2*Sten(1,3,1,3)/)
     PIvec(2)=-f2*(Ifir(1)-Ifir(3))/(f8*pi)
     PIvec(3)=-f2*(Ifir(2)-Ifir(1))/(f8*pi)
     PIvec(1)=-f2*(Ifir(3)-Ifir(2))/(f8*pi)
   end subroutine EshS4    
-
+  
+  ! Eshelby's tensor D(3,3,3,3)
   subroutine EshD4(vm,a,x,D4,fderphi,tderpsi)
     implicit none
     integer :: i,j,k,l,q,p,r
@@ -455,7 +457,7 @@ contains
        eigent(:,1)=(/Teigen(1,1),Teigen(2,2),Teigen(3,3),Teigen(1,2),          &
                    Teigen(2,3),Teigen(1,3)/) 
        Eh=ellip(i,10); vh=ellip(i,11)
-       call CMat(Em,vm,Cm); call CMat(Eh,vh,Ch); dC=Ch-Cm
+       call CMat(Em,vm,Cm); call CMat(Eh,vh,Ch); dC=Cm-Ch
        call SolveSix(Cm,stresst,straint)
        call SolveSix(Cm-matmul(dC,S4),matmul(dC,straint)+matmul(Ch,eigent),    &
           eigent)
@@ -513,7 +515,7 @@ contains
     ! ocoord: (nobs_loc,3) observation locations;
     ! crest: topography height;
     ! sol: (nobs_loc,9) ux ... yz, sigma_xx .. sigma_xz 
-    implicit none
+
     integer :: nobs,nrect,i,j,iret
     real(8) :: E,v,nu,lbd,alpha,rects(:,:),ocoord(:,:),crest,sol(:,:),x,y,z,   &
        deep, ux,uy,uz,exx,eyy,ezz,exy,eyz,exz,eyx,ezy,ezx,strain(6,1),         &

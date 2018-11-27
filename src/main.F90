@@ -397,9 +397,10 @@ program main
         call FixBnd("rhs")
      end do 
 8    call ObsGather
-     allocate(surfdat_glb(nsurf,18))
+     allocate(surfdat_glb(nsurf,18),surfnrm_glb(nsurf,3))
      call EshGather(surfdat,surfdat_glb)
      call EshGather(surfloc,surfloc_glb)
+     call EshGather(surfmat(:,7:9),surfnrm_glb)
   end if ! Half space case
   if (rank==nprcs-1) call EshSave 
 9 call PetscFinalize(ierr)
