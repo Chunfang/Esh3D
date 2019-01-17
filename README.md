@@ -1,4 +1,4 @@
-# Esh3D, a semi-analytical-numerical approach to full and (topographical) half space Eshelby's inclusion problems.
+# Esh3D, an analytical-numerical hybrid code for interactive Eshelby's inclusion problems in whole, half and finite spaces
 <p align="center">
 <img src="https://github.com/Chunfang/Esh3D/blob/master/Esh3D.png" height="50%" width="50%">
 </p>
