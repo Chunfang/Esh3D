@@ -1,0 +1,34 @@
+${Units('si')}
+undo off
+reset
+Set Duplicate Block Elements on
+brick x 40.5 y 40.5 z 30.5
+create Cylinder height 40.5 radius 20.25
+rotate volume 2 angle 90 about x
+move volume 2 x -10.125 y 0 z 32.787014426634883 # 15.25+10.125*sqrt(3) 
+create Cylinder height 40.5 radius 20.25
+rotate volume 3 angle 90 about x
+move volume 3 x 10.125 y 0 z -2.2870144266348831 # 15.25-10.125*sqrt(3)
+webcut volume 3 with sheet extended from surface 6
+webcut volume 3 with sheet extended from surface 2
+delete volume 4 5
+unite body 1 3
+subtract body 2 from body 1
+volume 1 move x 0 y 0 z -12.537014426634881 # -15.25+20.25*(1.-0.5*sqrt(3))
+volume all size 0.5
+merge all
+mesh volume all
+nodeset 1 surface 4 
+sideset 1 surface 4
+nodeset 2 surface 6 
+sideset 2 surface 6
+nodeset 3 surface 38 
+sideset 3 surface 38
+nodeset 4 surface 37 
+sideset 4 surface 37
+nodeset 5 surface 34 
+sideset 5 surface 34
+nodeset 6 surface 31 36 
+sideset 6 surface 31 36
+export mesh "esh3d_top.exo" dimension 3 overwrite
+quit
