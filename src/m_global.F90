@@ -16,35 +16,36 @@ module global
   implicit none
 #endif
   ! Global variables
-  integer :: nnds,nels,nmts,nfrcs,ntrcs,nabs,nsurf,frq,dsp,steps,tstep,nobs,   &
-     nobs_loc,nellip,nrect,nsurf_loc,dir,nabs_loc,ntol
-  real(8) :: alpha,beta,t,dt,rfrac,val,top,rstress(6),tol
-  integer,allocatable :: nodes(:,:),work(:),fnode(:),telsd(:,:),onlst(:,:),    &
-     surfel_glb(:),surfel(:),surfid_glb(:),surfid(:),idface(:),absel_glb(:),   &
-     absel(:),absid_glb(:),absid(:),absdir_glb(:),absdir(:),oel(:)
-  real(8),allocatable :: coords(:,:),mat(:),stress(:,:,:),vvec(:),ocoord(:,:), &
-     ocoord_loc(:,:),ellip(:,:),oshape(:,:),surfloc_glb(:,:),surfloc(:,:),     &
-     surfdat(:,:),surfmat_glb(:,:),surfmat(:,:),surf_glb(:),surfdat_glb(:,:),  &
-     surf(:),resid(:),odat_glb(:,:),odat(:,:),rect(:,:),surfnrm_glb(:,:)
-  real(8),allocatable,target :: uu(:),tot_uu(:)
-  character(4) :: stype
+  integer :: nnds,nels,ntrc,ntrc_loc,nobs,nobs_loc,nellip,nellip_loc,nrect,    &
+     ntol,nfix,n_incl
+  real(8) :: val,top,rstress(6),tol,mat(2)
+  integer,allocatable :: nodes(:,:),work(:),onlst(:,:),surfel_glb(:),surfel(:),&
+     surfside_glb(:),surfside(:),idface(:),oel(:),eel(:),bc(:,:),ndfix_glb(:), &
+     ndfix(:),bcfix_glb(:,:),bcfix(:,:)
+  real(8),allocatable :: coords(:,:),stress(:,:,:),vvec(:),ocoord(:,:),        &
+     ocoord_loc(:,:),ellip(:,:),oshape(:,:),surftrc_glb(:,:),surftrc(:,:),     &
+     surfloc_glb(:,:),surfloc(:,:),surfmat_glb(:,:),surfmat(:,:),surf_glb(:),  &
+     surf(:),surfdat_glb(:,:),surfdat(:,:),resid(:),odat_glb(:,:),odat(:,:),   &
+     rect(:,:),surfnrm_glb(:,:),instress(:,:),ellipeff(:,:),solfix(:,:),       &
+     Keig(:,:),Feig(:),solok(:,:)
+  real(8),allocatable,target :: uu(:),uu0(:)
+  character(12) :: stype
   character(256) :: output_file
-  logical :: half
-  Vec :: Vec_F,Vec_U,Vec_Um,Vec_Up
-  Vec,pointer :: Vec_W(:)
-  Mat :: Mat_K,Mat_M,Mat_Minv
-  KSP :: Krylov
+  logical :: full,half,fini,incl,inho
+  Vec :: Vec_F,Vec_U,Vec_Feig,Vec_Eig,Vec_incl
+  Mat :: Mat_K,Mat_Keig
+  KSP :: KryInc,Krylov
   PC :: PreCon
   ! Local element/side/node variables
   integer :: el,side,node
-  real(8) :: E,nu,dns,H,B
-  integer,allocatable :: indx(:),indxp(:),enodes(:)
-  real(8),allocatable :: k(:,:),m(:,:),f(:),ecoords(:,:)
+  real(8) :: E,nu
+  integer,allocatable :: indx(:),enodes(:)
+  real(8),allocatable :: k(:,:),f(:),ecoords(:,:)
   ! Variables for parallel code
   integer :: nprcs,rank,ierr
   integer,allocatable :: epart(:),npart(:) ! Partitioning
   ! L-G Mapping
-  integer,allocatable :: nmap(:),emap(:),nl2g(:,:),indxmap(:,:),ol2g(:)
+  integer,allocatable :: nmap(:),emap(:),nl2g(:,:),indxmap(:,:),ol2g(:),el2g(:)
   Vec :: Seq_U
   IS :: From,To
   VecScatter :: Scatter
@@ -61,20 +62,26 @@ contains
     ecoords=coords(enodes,:)
     E=mat(1); nu=mat(2)
     call FormElK(ecoords,E,nu,k)
+    call FixBCinLocalK(el,k)
     call FormLocalIndx(enodes,indx)
   end subroutine FormLocalK
 
-  ! Form local [M]
-  subroutine FormLocalM(el,m,indx)
+  ! Fix BCs (i.e., zero rows/columns) in local [K]
+  subroutine FixBCinLocalK(el,k)
     implicit none
-    integer :: el,indx(:)
-    real(8) :: m(:,:)
-    enodes=nodes(el,:)
-    ecoords=coords(enodes,:)
-    dns=mat(3)
-    call FormElM(ecoords,dns,m)
-    call FormElIndx(enodes,indx)
-  end subroutine FormLocalM
+    integer :: el,j,j1,j2
+    real(8) :: k(:,:)
+    do j=1,npel
+       do j1=1,dmn
+          if (bc(nodes(el,j),j1)==0) then
+             j2=dmn*j-dmn+j1
+             val=k(j2,j2)
+             k(j2,:)=f0; k(:,j2)=f0 ! Zero out rows and columns
+             k(j2,j2)=val
+          end if
+       end do
+    end do
+  end subroutine FixBCinLocalK
 
   ! Apply nodal force
   subroutine ApplyNodalForce(node,vvec)
@@ -94,15 +101,21 @@ contains
   ! Apply traction (EbEAve)
   subroutine ApplyTraction(el,side,vvec)
     implicit none
-    integer :: el,side,i,snodes(nps)
+    integer :: el,side,i,j,nd,snodes(nps),snode
     real(8) :: vvec(:),area
+    real(8),allocatable :: vec(:)
+    nd=size(vvec); allocate(vec(nd))
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     call EdgeAreaNodes(enodes,ecoords,side,area,snodes)
     vvec=vvec*area/dble(nps)
-    snodes=nl2g(snodes,2)
     do i=1,nps
-       call ApplyNodalForce(snodes(i),vvec)
+       vec=vvec
+       do j=1,nd 
+          if (bc(snodes(i),j)==0) vec(j)=f0
+       end do
+       snode=nl2g(snodes(i),2)
+       call ApplyNodalForce(snode,vec)
     end do
   end subroutine ApplyTraction
 
@@ -124,70 +137,11 @@ contains
     m=(r(1)*c(1)+r(2)*c(2)+r(3)*c(3))/(r(1)*r(1)+r(2)*r(2)+r(3)*r(3))
   end subroutine Mix
 
-  ! Form local damping matrix for elements with viscous dampers
-  subroutine FormLocalAbsC(el,side,m,indx)
-    implicit none
-    integer :: el,side,indx(:)
-    real(8) :: m(:,:),matabs(dmn,dmn),vec1(dmn),vec2(dmn),vec3(dmn)
-    enodes=nodes(el,:)
-    ecoords=coords(enodes,:)
-    E=mat(1); nu=mat(2)
-    dns=mat(3)
-    select case(eltype) 
-    case("tet")
-       select case(side) 
-       case(1)
-          vec1=ecoords(2,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(4,:)-ecoords(1,:),vec3)
-       case(2)
-          vec1=ecoords(4,:)-ecoords(3,:)
-          call Cross(vec1,ecoords(2,:)-ecoords(3,:),vec3)
-       case(3)
-          vec1=ecoords(4,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(3,:)-ecoords(1,:),vec3)
-       case(4)
-          vec1=ecoords(3,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(2,:)-ecoords(1,:),vec3)
-       end select
-       vec1=vec1/sqrt(sum(vec1*vec1))
-       vec3=vec3/sqrt(sum(vec3*vec3))
-       call Cross(vec1,vec3,vec2)
-       matabs(:,1)=vec1; matabs(:,2)=vec2; matabs(:,3)=vec3
-    case("hex")
-       select case(side) 
-       case(1)
-          vec1=ecoords(2,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(5,:)-ecoords(1,:),vec3)
-       case(2)
-          vec1=ecoords(3,:)-ecoords(2,:)
-          call Cross(vec1,ecoords(6,:)-ecoords(2,:),vec3)
-       case(3)
-          vec1=ecoords(4,:)-ecoords(3,:)
-          call Cross(vec1,ecoords(7,:)-ecoords(3,:),vec3)
-       case(4)
-          vec1=ecoords(5,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(4,:)-ecoords(1,:),vec3)
-       case(5)
-          vec1=ecoords(4,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(2,:)-ecoords(1,:),vec3)
-       case(6)
-          vec1=ecoords(6,:)-ecoords(5,:)
-          call Cross(vec1,ecoords(8,:)-ecoords(5,:),vec3)
-       end select
-       vec1=vec1/sqrt(sum(vec1*vec1))
-       vec3=vec3/sqrt(sum(vec3*vec3))
-       call Cross(vec1,vec3,vec2)
-       matabs(:,1)=vec1; matabs(:,2)=vec2; matabs(:,3)=vec3
-    end select
-    call FormElAbsC(enodes,ecoords,side,matabs,E,nu,dns,m)
-    call FormElIndx(enodes,indx)
-  end subroutine FormLocalAbsC
-
   ! Translation matrix from global to face coordinate
   subroutine Glb2Face(ecoords,side,matrot,idface)
     implicit none  
     integer :: side,idface(:)
-    real(8) :: ecoords(:,:),matrot(9),vec1(3),vec2(3),vec3(3),vec4(3),cntf(3),    &
+    real(8) :: ecoords(:,:),matrot(9),vec1(3),vec2(3),vec3(3),vec4(3),cntf(3), &
        cntv(3)
     cntv=(/sum(ecoords(:,1)),sum(ecoords(:,2)),sum(ecoords(:,3))/)/dble(npel)
     select case(eltype)
@@ -249,76 +203,17 @@ contains
     matrot(1:3)=vec1; matrot(4:6)=vec2; matrot(7:9)=vec3
   end subroutine Glb2Face
 
-  ! Impose roller boundary condition (Mat_K, Vec_F) 
-  subroutine FixBnd(strng)
+  ! Form RHS to cancel residual traction/displacement surfdat, solfix -> Vec_F
+  subroutine MatchSurf
     implicit none  
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
 #endif
-    character(3) :: strng
-    integer :: i,j,j1,idface(nps),dofface(3),idf(nps)
-    real(8) :: kabs(eldof,eldof),valf(nps)
-    do i=1,nabs_loc
-       call FormLocalK(absel(i),k,indx); kabs=k
-       indx=indxmap(indx,2)
-       select case(eltype)
-       case("tet") 
-          select case(absid(i))
-          case(1)
-             idface=(/1,2,4/)
-          case(2)
-             idface=(/2,3,4/)
-          case(3)
-             idface=(/1,3,4/)
-          case(4)
-             idface=(/1,2,3/)
-          end select
-       case("hex")   
-          select case(absid(i))  
-          case(1)
-             idface=(/1,2,5,6/)
-          case(2)
-             idface=(/2,3,6,7/)
-          case(3)
-             idface=(/3,4,7,8/)
-          case(4)
-             idface=(/1,4,5,8/)
-          case(5)
-             idface=(/1,2,3,4/)
-          case(6)
-             idface=(/5,6,7,8/)
-          end select
-       end select
-       do j=1,nps
-          dofface=(/((idface(j)-1)*3+j1,j1=1,3)/)
-          kabs(dofface(absdir(i)),:)=-k(dofface(absdir(i)),:)
-          kabs(:,dofface(absdir(i)))=-k(:,dofface(absdir(i)))
-          kabs(dofface(absdir(i)),dofface(absdir(i)))=f0
-          idf(j)=indx(dofface(absdir(i)))
-       end do
-       valf=f0
-       if (strng=="all") call MatSetValues(Mat_K,eldof,indx,eldof,indx,kabs,   &
-          Add_Values,ierr)
-       call VecSetValues(Vec_F,nps,idf,valf,insert_Values,ierr)
-    end do
-    if (strng=="all") then
-       call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
-       call MatAssemblyend(Mat_K,Mat_Final_Assembly,ierr)
-    end if
-    call VecAssemblyBegin(Vec_F,ierr)
-    call VecAssemblyEnd(Vec_F,ierr)
-  end subroutine FixBnd
-
-  ! Form RHS to free surface traction
-  subroutine FreeSurfTrac
-    implicit none  
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
-#include "petsc.h"
-#endif
-    integer :: i,j,snodes(nps)
-    real(8) :: mattmp(3,3),vectmp(3,1),matstr(3,3),vectrac(3),area
-    call VecZeroEntries(Vec_F,ierr)
-    do i=1,nsurf_loc
+    integer :: i,el,j,j1
+    real(8) :: mattmp(3,3),vectmp(3),vectmp0(3),matstr(3,3),vecstr(6),         &
+       estress(nip,6)
+    call VecZeroEntries(Vec_F,ierr) ! Incremental numerical RHS
+    do i=1,ntrc_loc
        do j=1,3  
           matstr(j,j)=surfdat(i,12+j)
        end do
@@ -327,26 +222,48 @@ contains
        matstr(1,3)=surfdat(i,18); matstr(3,1)=surfdat(i,18)
        mattmp=reshape(surfmat(i,:),(/3,3/))
        matstr=matmul(matmul(transpose(mattmp),matstr),mattmp)
-       vectmp(:,1)=matstr(:,3)
-       ! Rotate to global coordinate and change sign 
-       vectmp=-matmul(mattmp,vectmp)
-       vectrac=vectmp(:,1) 
-       enodes=nodes(surfel(i),:)
+       vectmp=matstr(:,3)
+       ! Subtract initial traction and change sign 
+       el=surfel(i) 
+       enodes=nodes(el,:)
        ecoords=coords(enodes,:)
-       call EdgeAreaNodes(enodes,ecoords,surfid(i),area,snodes)
-       vectrac=vectrac*area/dble(nps)
-       snodes=nl2g(snodes,2)
-       do j=1,nps
-          call ApplyNodalForce(snodes(j),vectrac)
-       end do 
+       call FormLocalIndx(enodes,indx)
+       call CalcElStress(ecoords,uu0(indx),mat(1),mat(2),estress(:,:))
+       vecstr=(/sum(estress(:,1)),sum(estress(:,2)),sum(estress(:,3)),         &
+                sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)        &
+              /dble(nip)
+       do j=1,3
+          matstr(j,j)=vecstr(j) 
+       end do
+       matstr(1,2)=vecstr(4); matstr(2,1)=vecstr(4)
+       matstr(2,3)=vecstr(5); matstr(3,2)=vecstr(5)
+       matstr(1,3)=vecstr(6); matstr(3,1)=vecstr(6)
+       matstr=matmul(matmul(transpose(mattmp),matstr),mattmp)
+       vectmp0=matstr(:,3)
+       vectmp=-(vectmp-vectmp0) 
+       ! Rotate to global coordinate
+       vectmp=matmul(mattmp,vectmp)
+       call ApplyTraction(surfel(i),surfside(i),vectmp)
     end do
+    if (fini) then ! Cancel fixed dofs only for finite domain
+       do i=1,nfix 
+          vectmp=-solfix(i,:3) 
+          do j=1,3
+             if (bc(ndfix(i),j)==0) then
+                j1=(nl2g(ndfix(i),2)-1)*3+j-1
+                call VecSetValue(Vec_F,j1,vectmp(j),Add_Values,ierr)
+            end if
+         end do
+       end do     
+    end if
     call VecAssemblyBegin(Vec_F,ierr)
     call VecAssemblyEnd(Vec_F,ierr)
-  end subroutine FreeSurfTrac 
+  end subroutine MatchSurf 
 
-  ! Observation/FD nodal base 
-  subroutine GetObsNd
+  ! Observation/inclusion nodal base 
+  subroutine GetObsNd(strng)
     implicit none
+    character(2) :: strng
     integer :: neval,ob,el
     integer,allocatable :: nd_full(:,:),pick(:),oel_full(:)
     real(8) :: xmin,xmax,ymin,ymax,zmin,zmax,xmind,xmaxd,ymind,ymaxd,zmind,    &
@@ -356,10 +273,13 @@ contains
     real(8),allocatable :: N_full(:,:)
     logical :: p_in_dom, p_in_el
     c=0.125d0 
-    ! Type of the evaluation Obs or FD
-    neval=nobs
+
+    ! Type of the evaluation obs or inclusion 
+    if (strng=="ob") neval=nobs
+    if (strng=="in") neval=nellip
     allocate(pick(neval))
     pick=0
+
     select case(eltype) 
     case("tet"); allocate(nd_full(neval,4),N_full(neval,4))
     case("hex"); allocate(nd_full(neval,8),N_full(neval,8))
@@ -369,7 +289,11 @@ contains
     ymind=minval(coords(:,2)); ymaxd=maxval(coords(:,2))
     zmind=minval(coords(:,3)); zmaxd=maxval(coords(:,3))
     do ob=1,neval ! Observation loop
-       xob=ocoord(ob,:)
+       if (strng=="ob") then
+          xob=ocoord(ob,:)
+       elseif (strng=="in") then
+          xob=ellip(ob,1:3) 
+       end if
        p_in_dom=(xob(1)>=xmind .and. xob(1)<=xmaxd .and. xob(2)>=ymind .and.   &
           xob(2)<=ymaxd)
        if (dmn>2) p_in_dom=(p_in_dom .and. xob(3)>=zmind .and. xob(3)<=zmaxd)
@@ -449,17 +373,24 @@ contains
           end do ! Element loop
        end if ! Point probably in domain
     end do ! Observation loop
-    nobs_loc=size(pack(pick,pick/=0))
-    allocate(ol2g(nobs_loc),ocoord_loc(nobs_loc,dmn),oel(nobs_loc))
-    select case(eltype) 
-    case("tet"); allocate(onlst(nobs_loc,4),oshape(nobs_loc,4))
-    case("hex"); allocate(onlst(nobs_loc,8),oshape(nobs_loc,8))
-    end select
-    ol2g=pack(pick,pick/=0)
-    ocoord_loc=ocoord(ol2g,:)
-    onlst=nd_full(ol2g,:)
-    oshape=N_full(ol2g,:)
-    oel=oel_full(ol2g)
+    if (strng=="ob") then
+       nobs_loc=size(pack(pick,pick/=0))
+       allocate(ol2g(nobs_loc),ocoord_loc(nobs_loc,dmn),oel(nobs_loc))
+       select case(eltype) 
+       case("tet"); allocate(onlst(nobs_loc,4),oshape(nobs_loc,4))
+       case("hex"); allocate(onlst(nobs_loc,8),oshape(nobs_loc,8))
+       end select
+       ol2g=pack(pick,pick/=0)
+       ocoord_loc=ocoord(ol2g,:)
+       onlst=nd_full(ol2g,:)
+       oshape=N_full(ol2g,:)
+       oel=oel_full(ol2g)
+    elseif (strng=="in") then
+       nellip_loc=size(pack(pick,pick/=0))
+       allocate(el2g(nellip_loc),eel(nellip_loc))
+       el2g=pack(pick,pick/=0)
+       eel=oel_full(el2g)
+    end if   
   end subroutine GetObsNd
 
   ! Form local index
@@ -469,132 +400,174 @@ contains
     call FormElIndx(enodes,indx)
   end subroutine FormLocalIndx
 
-  ! Recover surface disp/stress
-  subroutine RecoverSurf(i,el)
+  ! Surface data and residual traction (uu, surfdat -> sufdata(:,10:18), resid)
+  subroutine SurfSupResid
     implicit none
     integer :: i,el,j
-    real(8) :: edisp(npel,3),estress(nip,6),matstr(3,3),mattmp(3,3),vecstr(6)
-    enodes=nodes(el,:)
-    ecoords=coords(enodes,:)
-    E=mat(1); nu=mat(2)
-    call FormLocalIndx(enodes,indx)
-    call CalcElStress(ecoords,uu(indx),E,nu,estress(:,:))
-    edisp=reshape(uu(indx),(/npel,3/),(/f0,f0/),(/2,1/))
-    vecstr=surfdat(i,13:18)+                                                   &
-           (/sum(estress(:,1)),sum(estress(:,2)),sum(estress(:,3)),            &
-             sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)/dble(nip)
-    surfdat(i,13:18)=vecstr                                         
-    do j=1,3
-       matstr(j,j)=vecstr(j) 
+    real(8) :: edisp(npel,3),estress(nip,6),matstr0(3,3),matstr(3,3),          &
+       mattmp(3,3),vecstr(6)
+    do i=1,ntrc_loc
+       el=surfel(i) 
+       enodes=nodes(el,:)
+       ecoords=coords(enodes,:)
+       call FormLocalIndx(enodes,indx)
+       call CalcElStress(ecoords,uu(indx),mat(1),mat(2),estress(:,:))
+       edisp=reshape(uu(indx),(/npel,3/),(/f0,f0/),(/2,1/))
+       ! Superpose with surfdat
+       vecstr=surfdat(i,13:18)+                                                &
+              (/sum(estress(:,1)),sum(estress(:,2)),sum(estress(:,3)),         &
+                sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)        &
+              /dble(nip)
+       surfdat(i,13:18)=vecstr
+       do j=1,3
+          matstr(j,j)=vecstr(j) 
+       end do
+       matstr(1,2)=vecstr(4); matstr(2,1)=vecstr(4)
+       matstr(2,3)=vecstr(5); matstr(3,2)=vecstr(5)
+       matstr(1,3)=vecstr(6); matstr(3,1)=vecstr(6)
+       mattmp=reshape(surfmat(i,:),(/3,3/))
+       matstr=matmul(matmul(transpose(mattmp),matstr),mattmp)
+       ! Subtract initial numerical traction to estimate residual
+       call CalcElStress(ecoords,uu0(indx),mat(1),mat(2),estress(:,:))
+       vecstr=(/sum(estress(:,1)),sum(estress(:,2)),sum(estress(:,3)),         &
+                sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)        &
+              /dble(nip)
+       do j=1,3
+          matstr0(j,j)=vecstr(j) 
+       end do
+       matstr0(1,2)=vecstr(4); matstr0(2,1)=vecstr(4)
+       matstr0(2,3)=vecstr(5); matstr0(3,2)=vecstr(5)
+       matstr0(1,3)=vecstr(6); matstr0(3,1)=vecstr(6)
+       matstr=matstr-matmul(matmul(transpose(mattmp),matstr0),mattmp)
+       resid(i)=sqrt(sum(matstr(:,3)*matstr(:,3)))      
+       select case(eltype)
+       case("tet")
+          select case(surfside(i)) 
+          case(1)
+             idface=(/1,2,4/)
+          case(2)
+             idface=(/2,3,4/)
+          case(3)
+             idface=(/1,3,4/)
+          case(4)
+             idface=(/1,2,3/)
+          end select
+       case("hex")
+          select case(surfside(i)) 
+          case(1)
+             idface=(/1,2,5,6/)
+          case(2)
+             idface=(/2,3,6,7/)
+          case(3)
+             idface=(/3,4,7,8/)
+          case(4)
+             idface=(/1,4,5,8/)
+          case(5)
+             idface=(/1,2,3,4/)
+          case(6)
+             idface=(/5,6,7,8/)
+          end select
+       end select
+       surfdat(i,10:12)=surfdat(i,10:12)+(/sum(edisp(idface,1)),               &
+                                           sum(edisp(idface,2)),               &
+                                           sum(edisp(idface,3))/)/dble(nps)
     end do
-    matstr(1,2)=vecstr(4); matstr(2,1)=vecstr(4)
-    matstr(2,3)=vecstr(5); matstr(3,2)=vecstr(5)
-    matstr(1,3)=vecstr(6); matstr(3,1)=vecstr(6)
-    mattmp=reshape(surfmat(i,:),(/3,3/))
-    matstr=matmul(matmul(transpose(mattmp),matstr),mattmp)
-    resid(i)=sqrt(sum(matstr(:,3)*matstr(:,3)))      
-    select case(eltype)
-    case("tet")
-       select case(surfid(i)) 
-       case(1)
-          idface=(/1,2,4/)
-       case(2)
-          idface=(/2,3,4/)
-       case(3)
-          idface=(/1,3,4/)
-       case(4)
-          idface=(/1,2,3/)
-       end select
-    case("hex")
-       select case(surfid(i)) 
-       case(1)
-          idface=(/1,2,5,6/)
-       case(2)
-          idface=(/2,3,6,7/)
-       case(3)
-          idface=(/3,4,7,8/)
-       case(4)
-          idface=(/1,4,5,8/)
-       case(5)
-          idface=(/1,2,3,4/)
-       case(6)
-          idface=(/5,6,7,8/)
-       end select
-    end select
-    surfdat(i,10:12)=surfdat(i,10:12)+(/sum(edisp(idface,1)),                  &
-                                        sum(edisp(idface,2)),                  &
-                                        sum(edisp(idface,3))/)/dble(nps)
-  end subroutine RecoverSurf
+  end subroutine SurfSupResid
+
+  ! Superpose "fixed" boundary displacement
+  subroutine FixSup
+    implicit none
+    integer :: i,j
+    do i=1,nfix
+       solfix(i,:3)=solfix(i,:3)+uu((/((ndfix(i)-1)*3+j,j=1,3)/)) 
+    end do
+  end subroutine FixSup
+
+  ! Superpose observation disp/stress
+  subroutine ObsSup 
+    implicit none
+    integer :: ob,i,j,ind(npel),row(eldof)
+    real(8) :: vectmp(3,1),strtmp(6),mattmp(3,npel),vecshp(npel,1),            &
+       estress(nip,6)
+    if ((nobs_loc)>0) then
+       do ob=1,nobs_loc
+          ind=onlst(ob,:)
+          do i=1,npel
+             row((/((i-1)*3+j,j=1,3)/))=(/((ind(i)-1)*3+j,j=1,3)/)
+          end do
+          mattmp=reshape(uu(row),(/3,npel/))
+          vecshp=reshape(oshape(ob,:),(/npel,1/))
+          vectmp=matmul(mattmp,vecshp) 
+          odat(ob,10:12)=odat(ob,10:12)+vectmp(:,1) ! Superpose
+          enodes=nodes(oel(ob),:) 
+          ecoords=coords(enodes,:)
+          call CalcElStress(ecoords,uu(row),mat(1),mat(2),estress(:,:))
+          strtmp=(/sum(estress(:,1)),sum(estress(:,2)),sum(estress(:,3)),      &
+                   sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)     &
+                   /dble(nip)
+          odat(ob,13:18)=odat(ob,13:18)+strtmp
+       end do 
+    end if
+  end subroutine ObsSup 
+
+  ! Update interactive eiginstrain Vec_Eig -> ellipeff(12:17)
+  subroutine UpInhoEigen(eigen)
+    implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#include "petsc.h"
+#endif
+    integer :: nellip,i,j,j1,j2,idx(6)
+    real(8) :: eigen(:,:),vec(6),strain(6)
+    nellip=size(eigen,1)
+    call VecGetOwnershipRange(Vec_Eig,j1,j2,ierr)
+    do i=1,nellip
+       idx=(/((i-1)*6+j-1,j=1,6)/)
+       vec=f0
+       if (idx(1)>=j1 .and. idx(6)<j2) call VecGetValues(Vec_Eig,6,idx,vec,ierr)
+       call MPI_AllReduce(vec,strain,6,MPI_Real8,MPI_Sum,MPI_Comm_World,ierr)
+       eigen(i,:)=strain
+    end do
+  end subroutine UpInhoEigen
   
+  ! Evaluate inclusions stress changes uu (solok) -> instress(nellip,6)
+  subroutine InStrEval(ok)
+    implicit none
+    integer :: ii,i,j,row(eldof)
+    real(8) :: strtmp(6),estress(nip,6)
+    logical :: okval
+    logical,optional :: ok ! Include Okada source
+    instress=f0 ! Rest inclusion stress
+    do ii=1,nellip_loc
+       enodes=nodes(eel(ii),:)
+       do i=1,npel
+          row((/((i-1)*3+j,j=1,3)/))=(/((enodes(i)-1)*3+j,j=1,3)/)
+       end do
+       ecoords=coords(enodes,:)
+       call CalcElStress(ecoords,uu(row),mat(1),mat(2),estress(:,:))
+       strtmp=(/sum(estress(:,1)),sum(estress(:,2)),sum(estress(:,3)),         &
+                sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)        &
+                /dble(nip)
+       instress(el2g(ii),:)=strtmp
+    end do 
+    if (present(ok)) then 
+       okval=ok
+    else
+       okval=.false.
+    end if
+    do ii=1,nellip
+       call MPI_AllReduce(instress(ii,:),strtmp,6,MPI_Real8,MPI_Sum,           &
+          MPI_Comm_World,ierr)
+       if (okval) strtmp=strtmp+solok(ii,4:9)
+       instress(ii,:)=strtmp
+    end do
+  end subroutine InStrEval
+
   ! Print message
   subroutine PrintMsg(msg)
     implicit none
     character(*) :: msg
     if (rank==0) print*,msg
   end subroutine PrintMsg
-
-  ! Write results in ASCII VTK (legacy) format
-  subroutine WriteOutput
-    implicit none
-    character(64) :: fmt
-    character(256) :: name,name0,name1
-    integer,save :: k=0
-    integer :: i,j,j1,lnnds,lnels
-    real(8),pointer :: field_val(:)
-    field_val=>uu
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,I0,A,A,A)')trim(name0),rank,"_",trim(name1),".vtk"
-    open(10,file=adjustl(name),status='replace')
-    lnnds=size(coords,1)
-    lnels=size(nodes,1)
-    write(10,'(A)')"# vtk DataFile Version 2.0"
-    write(10,'(A)')"File written by Esh3D"
-    write(10,'(A)')"ASCII"
-    write(10,'(A)')"DATASET UNSTRUCTURED_GRID"
-    write(10,'(A,I0,A)')"POINTS ",lnnds," double"
-    fmt="(3(F0.3,1X))"
-    select case(dmn)
-    case(2)
-       do i=1,lnnds
-          write(10,fmt)(/(coords(i,:)/km2m),f0/)
-       end do
-    case(3)
-       do i=1,lnnds
-          write(10,fmt)(/(coords(i,:)/km2m)/)
-       end do
-    end select
-    write(10,'(A,I0,1X,I0)')"CELLS ",lnels,lnels*(npel+1)
-    select case(npel)
-    case(3); fmt="(I0,3(1X,I0))"
-    case(4); fmt="(I0,4(1X,I0))"
-    case(8); fmt="(I0,8(1X,I0))"
-    end select
-    do i=1,lnels
-       write(10,fmt)npel,nodes(i,:)-1
-    end do
-    write(10,'(A,I0)')"CELL_TYPES ",lnels
-    do i=1,lnels
-       write(10,'(I0)')vtkid
-    end do
-    write(10,'(A,I0)')"POINT_DATA ",lnnds
-    j=dmn
-    write(10,'(A)')"VECTORS displacements double"
-    fmt="(3(F0.6,1X))"
-    select case(dmn)
-    case(2)
-       do i=1,lnnds
-          j1=i*j
-          write(10,fmt)(/field_val(j1-1),field_val(j1),f0/) ! 2D U
-       end do
-    case(3)
-       do i=1,lnnds
-          j1=i*j
-          write(10,fmt)(/field_val(j1-2),field_val(j1-1),field_val(j1)/) ! 3D U
-       end do
-    end select
-    close(10); k=k+1
-  end subroutine WriteOutput
 
   ! Save Esh3D solution to H5 file
   subroutine EshSave
@@ -626,9 +599,9 @@ contains
     call h5dcreate_f(idfile,"ellip",h5t_native_double,spc_dat,iddat,err)
     call h5dwrite_f(iddat,h5t_native_double,transpose(ellip),dim_dat,err)
     call h5dclose_f(iddat,err)
-    if (half) then
+    if (half .or. fini) then
        ! Surface grid
-       dim_dat=(/3,nsurf/)
+       dim_dat=(/3,ntrc/)
        call h5screate_simple_f(2,dim_dat,spc_dat,err)
        call h5dcreate_f(idfile,"scoord",h5t_native_double,spc_dat,iddat,err)
        call h5dwrite_f(iddat,h5t_native_double,transpose(surfloc_glb)/km2m,    &

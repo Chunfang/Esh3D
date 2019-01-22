@@ -19,7 +19,7 @@ program main
   logical :: l
   integer,pointer :: null_i=>null()
   real(8),pointer :: null_r=>null()
-  integer :: n,i,j,j1,j2,nodal_bw,status(MPI_STATUS_SIZE)
+  integer :: n,i,j,j1,j2,nodal_bw,incl_bw,status(MPI_STATUS_SIZE)
   integer,allocatable :: hit(:)
 
   call PetscInitialize(Petsc_Null_Character,ierr)
@@ -54,7 +54,7 @@ program main
   call PrintMsg("Reading input ...")
   call ReadParameters
 
-  if (half) then ! Half space problem
+  if (half .or. fini) then ! Half or finite space problem
      ! Set element specific constants
      call InitializeElement
      ! Partition mesh using METIS, create mappings, and read on-rank mesh data
@@ -67,7 +67,7 @@ program main
               j=npel*(i-1)+1; n=npel*i; read(10,*)nodes(1,j:n); work(i+1)=n
            end do
            nodes=nodes-1
-           call METIS_PartMeshNodal(nels,nnds,work,nodes,null_i,null_i,nprcs,     &
+           call METIS_PartMeshNodal(nels,nnds,work,nodes,null_i,null_i,nprcs,  &
               null_r,null_i,n,epart,npart)
            deallocate(nodes,work)
            rewind(10); call ReadParameters
@@ -126,11 +126,12 @@ program main
            work(i)=j; j=j+1
         end if
      end do
-     n=sum(npart); allocate(coords(n,dmn))
+     n=sum(npart); allocate(coords(n,dmn),bc(n,dmn))
      j=1
      do i=1,nnds
         if (npart(i)==1) then
-           read(10,*)coords(j,:); j=j+1
+           read(10,*)coords(j,:),bc(j,:)
+           j=j+1
         else
            read(10,*)val
         end if
@@ -159,8 +160,8 @@ program main
      deallocate(epart,npart)
 
      ! Initialize local element variables and global U
-     allocate(ipoint(nip,dmn),weight(nip),k(eldof,eldof),m(eldof,eldof),       &
-        f(eldof),indx(eldof),enodes(npel),ecoords(npel,dmn),vvec(dmn))
+     allocate(ipoint(nip,dmn),weight(nip),k(eldof,eldof),f(eldof),indx(eldof), &
+        enodes(npel),ecoords(npel,dmn),vvec(dmn))
      call SamPts(ipoint,weight)
      n=dmn*nnds 
      call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,n,Vec_U,ierr)
@@ -180,62 +181,13 @@ program main
      call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
      call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
 
-     ! Initialize and form mass matrix and its inverse
-     call PrintMsg("Forming [M] & [M]^-1 ...")
-     call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,n,1,       &
-        Petsc_Null_Integer,0,Petsc_Null_Integer,Mat_M,ierr)
-     call MatSetOption(Mat_M,Mat_New_Nonzero_Allocation_Err,Petsc_False,ierr)
-     do i=1,nels
-        call FormLocalM(i,m,indx)
-        indx=indxmap(indx,2)
-        do j=1,eldof
-           val=m(j,j)
-           call MatSetValue(Mat_M,indx(j),indx(j),val,Add_Values,ierr)
-        end do
-     end do
-     call MatAssemblyBegin(Mat_M,Mat_Final_Assembly,ierr)
-     call MatAssemblyEnd(Mat_M,Mat_Final_Assembly,ierr)
-     call MatDuplicate(Mat_M,Mat_Do_Not_Copy_Values,Mat_Minv,ierr)
-     call MatGetDiagonal(Mat_M,Vec_U,ierr) ! Vec_U is used as a work vector
-     call VecReciprocal(Vec_U,ierr)
-     call MatDiagonalSet(Mat_Minv,Vec_U,Insert_Values,ierr)
-     call VecZeroEntries(Vec_U,ierr)
-     call MatScale(Mat_M,alpha,ierr)
-     allocate(hit(nabs),absel_glb(nabs),absid_glb(nabs),absdir_glb(nabs)) 
-
-     ! Read abs boundary
-     hit=0
-     do j=1,nabs 
-        read(10,*)el,side,dir; el=emap(el)
-        if (el/=0) then
-           hit(j)=j; absel_glb(j)=el; absid_glb(j)=side; absdir_glb(j)=dir
-           call FormLocalAbsC(el,side,m,indx)
-           indx=indxmap(indx,2)
-           do j1=1,eldof
-              do j2=1,eldof 
-                 val=m(j1,j2)
-                 if (abs(val)>f0) call MatSetValue(Mat_M,indx(j1),indx(j2),val,&
-                    Add_Values,ierr)
-              end do
-           end do
-        end if
-     end do
-     call MatAssemblyBegin(Mat_M,Mat_Final_Assembly,ierr)
-     call MatAssemblyEnd(Mat_M,Mat_Final_Assembly,ierr)
-     nabs_loc=size(pack(hit,hit>0))
-     allocate(absel(nabs_loc),absid(nabs_loc),absdir(nabs_loc))
-     absel=absel_glb(pack(hit,hit>0))
-     absid=absid_glb(pack(hit,hit>0))
-     absdir=absdir_glb(pack(hit,hit>0))
-     deallocate(hit,absel_glb,absid_glb,absdir_glb)
-
-     ! Read free surface coordinate/orientation
-     allocate(surfloc_glb(nsurf,3),hit(nsurf),surfid_glb(nsurf),               &
-        surfmat_glb(nsurf,9),surfel_glb(nsurf),surf_glb(nsurf))
-     hit=0; nsurf_loc=0
+     ! Read traction surface (surfel, surfside, surftrc, surf) 
+     allocate(surfel_glb(ntrc),surfside_glb(ntrc),surftrc_glb(ntrc,3),         &
+        surf_glb(ntrc),surfloc_glb(ntrc,3),surfmat_glb(ntrc,9),hit(ntrc))
+     hit=0; ntrc_loc=0
      allocate(idface(nps))
-     do j=1,nsurf ! Read surf surface
-        read(10,*)el,side,surf_glb(j); el=emap(el)
+     do j=1,ntrc         
+        read(10,*)el,side,surftrc_glb(j,:),surf_glb(j); el=emap(el)
         if (el/=0) then ! Local surf element
            ecoords=coords(nodes(el,:),:)
            call Glb2Face(ecoords,side,surfmat_glb(j,:),idface)
@@ -246,17 +198,36 @@ program main
                               sum(ecoords(:,2)),                               &
                               sum(ecoords(:,3))/)/dble(npel)
            surfel_glb(j)=el 
-           surfid_glb(j)=side
+           surfside_glb(j)=side
            hit(j)=j
         end if
      end do
-     nsurf_loc=size(pack(hit,hit>0))
-     allocate(surfloc(nsurf_loc,3)); surfloc=surfloc_glb(pack(hit,hit>0),:)
-     allocate(surfid(nsurf_loc)); surfid=surfid_glb(pack(hit,hit>0))
-     allocate(surfmat(nsurf_loc,9)); surfmat=surfmat_glb(pack(hit,hit>0),:)
-     allocate(surfel(nsurf_loc)); surfel=surfel_glb(pack(hit,hit>0))
-     allocate(surf(nsurf_loc)); surf=surf_glb(pack(hit,hit>0))
-     deallocate(surfid_glb,surfmat_glb,surfel_glb,surf_glb,hit)
+     ntrc_loc=size(pack(hit,hit>0))
+     allocate(surfel(ntrc_loc)); surfel=surfel_glb(pack(hit,hit>0))
+     allocate(surfside(ntrc_loc)); surfside=surfside_glb(pack(hit,hit>0))
+     allocate(surftrc(ntrc_loc,3)); surftrc=surftrc_glb(pack(hit,hit>0),:)
+     allocate(surf(ntrc_loc)); surf=surf_glb(pack(hit,hit>0))
+     allocate(surfloc(ntrc_loc,3)); surfloc=surfloc_glb(pack(hit,hit>0),:)
+     allocate(surfmat(ntrc_loc,9)); surfmat=surfmat_glb(pack(hit,hit>0),:)
+     deallocate(surfel_glb,surfside_glb,surftrc_glb,surf_glb,surfmat_glb,hit)
+
+     if (fini) then ! Nodes associated with fixed boundary bc = 0  
+        n=size(coords,1)
+        allocate(ndfix_glb(n),bcfix_glb(n,3)) 
+        ndfix_glb=0
+        do i=1,n
+           if (sum(bc(i,:))<3) then
+              ndfix_glb(i)=i
+              bcfix_glb(i,:)=bc(i,:)
+           end if
+        end do
+        nfix=size(pack(ndfix_glb,ndfix_glb>0))
+        allocate(ndfix(nfix),bcfix(nfix,3),solfix(nfix,9)); solfix=f0
+        ndfix=ndfix_glb(pack(ndfix_glb,ndfix_glb>0))
+        bcfix=bc(ndfix,:)
+        deallocate(ndfix_glb,bcfix_glb)
+     end if
+
      deallocate(nmap,emap)
 
      ! Initialize arrays to communicate ghost node values
@@ -268,121 +239,211 @@ program main
      call ISCreateGeneral(Petsc_Comm_Self,j,indxmap(:,1),Petsc_Copy_Values,To, &
         ierr)
      call VecScatterCreate(Vec_U,From,Seq_U,To,Scatter,ierr)
-     allocate(uu(j),tot_uu(j)); uu=f0; tot_uu=f0
+     allocate(uu(j),uu0(j)); uu=f0; uu0=f0
+  end if ! Half or finite space FE preparation  
 
-  end if ! Half space FE preparation  
-
-  ! Full space Eshelby's solution
-  read(10,*)rstress(:)
-  do i=1,nellip 
-     read(10,*)ellip(i,:) 
+  if (inho) then 
+     read(10,*)rstress(:)
+  elseif (incl) then
+     rstress=f0 
+  end if
+  do i=1,nellip
+     if (incl) then
+        read(10,*)ellip(i,:9),ellip(i,12:)
+        ellip(i,10:11)=mat
+     elseif (inho) then
+        read(10,*)ellip(i,:) 
+     end if
      ellip(i,1:6)=km2m*ellip(i,1:6) ! Centroids and semi-axises
   end do
+  
+  !Translate eigenstrain from inclusion coordinate to global coordinate
+  call EigIncl2Glb(ellip)
+  ! ellipeff with evolving eigen sources
+  allocate(ellipeff(nellip,17)); ellipeff=ellip
   do i=1,nrect
       read(10,*)rect(i,:)
       rect(i,1:5)=km2m*rect(i,1:5)
   end do
+  ! Okada solution at inclusion centroids
+  if (inho .and. (half .or. fini) .and. nrect>0) allocate(solok(nellip,9))
   do i=1,nobs
      read(10,*)ocoord(i,:) 
      ocoord(i,:)=km2m*ocoord(i,:)
   end do
   close(10) ! End of input
-  if (.not. half) then !rank==nprcs-1 .and. 
-     call EshSol(mat(1),mat(2),rstress,ellip,ocoord,odat_glb(:,:9))
+
+  ! Global linear system matrix for interactive inhomogeneities  
+  if (inho) then
+     n=nellip*6
+     incl_bw=nellip*3+(nellip-1)*6
+     allocate(Keig(n,n),Feig(n))
+     call EshKeig(mat(1),mat(2),ellip,Keig)
+     !do i=1,nellip*6
+     !   if(rank==0)print('(30(ES11.2E3,X))'), Keig(i,:)
+     !end do
+     ! Entries of one stress tensor are not split by different ranks
+     call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nellip,Vec_incl,ierr)
+     call VecGetLocalSize(Vec_incl,n_incl,ierr)
+     call MatCreateAIJ(Petsc_Comm_World,n_incl*6,n_incl*6,n,n,incl_bw,         &
+        Petsc_Null_Integer,incl_bw,Petsc_Null_Integer,Mat_Keig,ierr)
+     call MatSetOption(Mat_Keig,Mat_New_Nonzero_Allocation_Err,Petsc_False,    &
+        ierr)
+     ! From [Keig]
+     if (rank==nprcs-1) call MatSetValues(Mat_Keig,n,(/(i,i=0,n-1)/),n,        &
+        (/(i,i=0,n-1)/),Keig,Insert_Values,ierr)
+     call MatAssemblyBegin(Mat_Keig,Mat_Final_Assembly,ierr)
+     call MatAssemblyEnd(Mat_Keig,Mat_Final_Assembly,ierr)
+     call KSPCreate(Petsc_Comm_World,KryInc,ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
+     call KSPSetOperators(KryInc,Mat_Keig,Mat_Keig,Different_Nonzero_Pattern,ierr)
+#else
+     call KSPSetOperators(KryInc,Mat_Keig,Mat_Keig,ierr)
+#endif
+     call SetupKSPSolver(KryInc)
+     call VecCreateMPI(Petsc_Comm_World,n_incl*6,n,Vec_Feig,ierr)
+     call VecDuplicate(Vec_Feig,Vec_Eig,ierr)
+     call VecDestroy(Vec_incl,ierr)
   end if
 
-  if (half) then 
-     call PrintMsg("Numerical half space correction ...")
+  ! Full space Eshelby's solution
+  if (full) then 
+     if (inho) then ! Interactive eigenstrain at inhomogeneity centroids
+        do i=1,nellip 
+           instress(i,:)=rstress
+        end do
+        ! Form [Feig]
+        call EshFeig(mat(1),mat(2),instress,ellip,Feig,init=.true.)
+        if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,                &
+           (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
+        call VecAssemblyBegin(Vec_Feig,ierr)
+        call VecAssemblyEnd(Vec_Feig,ierr)
+        call KSPSolve(KryInc,Vec_Feig,Vec_Eig,ierr)
+        call UpInhoEigen(ellipeff(:,12:17))
+     end if
+     call EshIncSol(mat(1),mat(2),ellipeff,ocoord,odat_glb(:,:9))
+  end if
+
+  if (half .or. fini) then 
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
      if (rank==nprcs-1) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
-     call VecDuplicate(Vec_U,Vec_F,ierr)
-     allocate(surfdat(nsurf_loc,18)); surfdat=f0
+     allocate(surfdat(ntrc_loc,18)); surfdat=f0
 
      ! Find the topography thickness
-     if (nsurf_loc>0) then
+     if (ntrc_loc>0) then
         val=maxval(surfloc(:,3))
      else
         val=maxval(coords(:,3))
      end if
      call MPI_AllReduce(val,top,1,MPI_Real8,MPI_Max,MPI_Comm_World,ierr)
 
-     ! Full space solution at "free" surface 
-     if (nsurf_loc>0) then 
-        call EshSol(mat(1),mat(2),rstress,ellip,surfloc,surfdat(:,:9))
-        if (nrect>0) then ! Add Okada fault solution
-            call OkSol(mat(1),mat(2),rect,surfloc,top,surfdat(:,:9))
-        end if
-        surfdat(:,10:)=surfdat(:,:9)
-     end if
-     call FreeSurfTrac
-
-!     allocate(edisp(eldof),estress(nip,6))
-     ! Explicit solve with one-step traction
-!     steps=int(ceiling(t/dt))
-!     call VecDuplicate(Vec_U,Vec_Um,ierr)
-!     call VecZeroEntries(Vec_Um,ierr)
-!     call VecDuplicate(Vec_U,Vec_Up,ierr)
-!     call VecDuplicateVecsF90(Vec_U,6,Vec_W,ierr)
-!     do tstep=0,steps
-!        call MatMult(Mat_K,Vec_U,Vec_W(1),ierr)
-!        call VecAYPX(Vec_W(1),-f1,Vec_F,ierr)
-!        call VecScale(Vec_W(1),dt**2,ierr)
-!        call VecWAXPY(Vec_W(2),-f1,Vec_Um,Vec_U,ierr)
-!        call MatMult(Mat_K,Vec_W(2),Vec_W(3),ierr)
-!        call MatMult(Mat_M,Vec_W(2),Vec_W(4),ierr)
-!        call VecAXPY(Vec_W(4),beta,Vec_W(3),ierr)
-!        call VecScale(Vec_W(4),dt,ierr)
-!        call VecWAXPY(Vec_W(5),-f1,Vec_W(4),Vec_W(1),ierr)
-!        call MatMult(Mat_Minv,Vec_W(5),Vec_W(6),ierr)
-!        call VecWAXPY(Vec_Up,f2,Vec_U,Vec_W(6),ierr)
-!        call VecAXPY(Vec_Up,-f1,Vec_Um,ierr)
-!        if (tstep==0) call VecZeroEntries(Vec_F,ierr) 
-!        if (rank==0) print'(A12,I0,A,I0)'," Time Step ",tstep,'/',steps
-!        call VecCopy(Vec_U,Vec_Um,ierr)
-!        call VecCopy(Vec_Up,Vec_U,ierr)
-!        call GetVec_U; tot_uu=tot_uu+uu
-!        !if (frq>0) then
-!        !   if (mod(tstep,frq)==0) call WriteOutput
-!        !end if
-!     end do
-
-     ! Implicit solve
+     ! Implicit solver
      call KSPCreate(Petsc_Comm_World,Krylov,ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
      call KSPSetOperators(Krylov,Mat_K,Mat_K,Different_Nonzero_Pattern,ierr)
 #else
      call KSPSetOperators(Krylov,Mat_K,Mat_K,ierr)
 #endif
-     call SetupKSPSolver
+     call SetupKSPSolver(Krylov)
+     call VecDuplicate(Vec_U,Vec_F,ierr); call VecZeroEntries(Vec_F,ierr)
 
-     call FixBnd("all")
-     allocate(resid(max(1,nsurf_loc))); resid=0
-     do j=1,nsurf_loc
-        call RecoverSurf(j,surfel(j))
-     end do
-     ! Initial Obs data
-     call GetObsNd; allocate(odat(nobs_loc,18)); odat=f0
+     ! Solve initial boundary problem for nonzero surface loading
+     allocate(resid(ntrc_loc)) ! Traction magnitudes
+     resid=sqrt(surftrc(:,1)**2+surftrc(:,2)**2+surftrc(:,3)**2)
+     call MPI_AllReduce(maxval(resid),val,1,MPI_Real8,MPI_Max,MPI_Comm_World,  &
+        ierr)
+     if (val>tol .and. inho) then
+        call PrintMsg("Solving initial boundary condition problem ...") 
+        ! Apply background traction
+        do i=1,ntrc_loc
+           el=surfel(i); side=surfside(i); vvec=surftrc(i,:)
+           call ApplyTraction(el,side,vvec)
+        end do
+        call VecAssemblyBegin(Vec_F,ierr)
+        call VecAssemblyEnd(Vec_F,ierr)
+        call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+        call GetVec_U; uu0=uu
+     end if
+     
+     ! Interactive eigenstrain at inhomogeneity centroids, ellipeff(:,12:17)
+     if (inho) then 
+        ! Stress perturbation at inclusion centroids
+        call GetObsNd("in")
+        if (nrect>0) then ! Okada stress at 
+           call OkSol(mat(1),mat(2),rect,ellip(:,:3),top,solok)
+           call InStrEval(ok=.true.) ! uu (solok) -> instress
+        else
+           call InStrEval
+        end if
+        do i=1,nellip ! Add remote stress
+           instress(i,:)=instress(i,:)+rstress
+        end do
+        call EshFeig(mat(1),mat(2),instress,ellip,Feig,init=.true.) 
+        if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,                &
+           (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
+        call VecAssemblyBegin(Vec_Feig,ierr)
+        call VecAssemblyEnd(Vec_Feig,ierr)
+        call KSPSolve(KryInc,Vec_Feig,Vec_Eig,ierr)
+        call UpInhoEigen(ellipeff(:,12:17))
+     end if
+
+     ! Full space solution at traction surface 
+     if (ntrc_loc>0) then 
+        call EshIncSol(mat(1),mat(2),ellipeff,surfloc,surfdat(:,:9))
+        ! Add Okada fault solution
+        if (nrect>0) call OkSol(mat(1),mat(2),rect,surfloc,top,surfdat(:,:9))
+        surfdat(:,10:)=surfdat(:,:9)
+     end if
+     ! Full space solution at fix boundary
+     if (fini) then 
+        call EshIncSol(mat(1),mat(2),ellipeff,coords(ndfix,:),solfix) 
+        if (nrect>0) call OkSol(mat(1),mat(2),rect,coords(ndfix,:),top,solfix)
+     end if
+     ! Full space solution at observation 
+     call GetObsNd("ob"); allocate(odat(nobs_loc,18)); odat=f0
      if (nobs_loc>0) then
-        call EshSol(mat(1),mat(2),rstress,ellip,ocoord_loc,odat(:,:9)) 
-        if (nrect>0) then ! Add Okada fault solution
-            call OkSol(mat(1),mat(2),rect,ocoord_loc,top,odat(:,:9))
-        end if 
+        call EshIncSol(mat(1),mat(2),ellipeff,ocoord_loc,odat(:,:9))
+        if (nrect>0) call OkSol(mat(1),mat(2),rect,ocoord_loc,top,odat(:,:9)) 
         odat(:,10:)=odat(:,:9)
      end if
-     ! Initial residual traction
+
+     ! Superpose, and estimate residual traction
+     call SurfSupResid
+     if (fini) call FixSup
+     call ObsSup
      call MPI_AllReduce(maxval(pack(resid,surf>0)),val,1,MPI_Real8,MPI_Max,    &
         MPI_Comm_World,ierr)
      if (val<tol) go to 8 
-     i=0 
+     if (rank==0) print('(A,X,ES11.2E3,X,A,X,ES11.2E3)'),                      &
+        "Step 0 residual traction",val,">",tol
+     call MatchSurf ! Cancel residual traction/displacement
+
+     i=0 ! Half/finite space correction  
      do while(.true. .and. i<ntol+1)
         i=i+1
         call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
-        call GetVec_U; tot_uu=tot_uu+uu
-        ! Superpose disp/stress and cancel residual traction
-        do j=1,nsurf_loc
-           call RecoverSurf(j,surfel(j))
-        end do
-        call ObsEval
+        call GetVec_U
+
+        if (inho) then ! surface -> inclusion interaction
+           call InStrEval 
+           call EshFeig(mat(1),mat(2),instress,ellip,Feig)
+           if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,             &
+              (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
+           call VecAssemblyBegin(Vec_Feig,ierr)
+           call VecAssemblyEnd(Vec_Feig,ierr)
+           call KSPSolve(KryInc,Vec_Feig,Vec_Eig,ierr)
+           call UpInhoEigen(ellipeff(:,12:17))
+           call EshIncSol(mat(1),mat(2),ellipeff,surfloc,surfdat(:,10:))
+           if (nobs_loc>0) call EshIncSol(mat(1),mat(2),ellipeff,ocoord_loc,   &
+              odat(:,10:)) 
+           if (fini) call EshIncSol(mat(1),mat(2),ellipeff,coords(ndfix,:),    &
+              solfix)
+        end if 
+
+        ! Superpose disp/stress to cancel residual traction
+        call SurfSupResid
+        if (fini) call FixSup
+        call ObsSup
         call MPI_AllReduce(maxval(pack(resid,surf>0)),val,1,MPI_Real8,MPI_Max, &
            MPI_Comm_World,ierr)
         if (val<tol) then
@@ -393,11 +454,10 @@ program main
            if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,ES11.2E3)'),       &
                "Step",i,"residual traction",val,">",tol 
         end if    
-        call FreeSurfTrac
-        call FixBnd("rhs")
+        call MatchSurf
      end do 
 8    call ObsGather
-     allocate(surfdat_glb(nsurf,18),surfnrm_glb(nsurf,3))
+     allocate(surfdat_glb(ntrc,18),surfnrm_glb(ntrc,3))
      call EshGather(surfdat,surfdat_glb)
      call EshGather(surfloc,surfloc_glb)
      call EshGather(surfmat(:,7:9),surfnrm_glb)
@@ -412,18 +472,30 @@ contains
     implicit none
     integer,save :: k=0
     read(10,*)stype
-    if (stype=="full") half=.false.
-    if (stype=="half") half=.true.
-    read(10,*)nellip,nrect,nobs
-    if (k==0) allocate(ocoord(nobs,3),ellip(nellip,17),rect(nrect,9))
-    if (half) then
-       read(10,*)eltype,nodal_bw 
-       read(10,*)nels,nnds,nabs,nsurf,frq
-       read(10,*)t,dt,alpha,beta,rfrac,tol,ntol
-       if (k==0) allocate(odat_glb(nobs,18),mat(3))
+    full=.false.;half=.false.;fini=.false.;incl=.false.;inho=.false.
+    if (index(stype,"full")/=0) full=.true.
+    if (index(stype,"half")/=0) half=.true.
+    if (index(stype,"fini")/=0) fini=.true.
+    if (index(stype,"incl")/=0) incl=.true.
+    if (index(stype,"inho")/=0) inho=.true.
+    if (full) then 
+       read(10,*)nellip,nobs
     else
-       if (k==0) allocate(odat_glb(nobs,9),mat(2))
-       nsurf=0
+       read(10,*)nellip,nrect,nobs
+    end if
+    if (k==0) then
+       allocate(ocoord(nobs,3))
+       allocate(ellip(nellip,17),instress(nellip,6)); instress=f0 
+       if (half .or. fini) allocate(rect(nrect,9))
+    end if
+    if (half .or. fini) then
+       read(10,*)eltype,nodal_bw 
+       read(10,*)nels,nnds,ntrc
+       read(10,*)tol,ntol
+       if (k==0) allocate(odat_glb(nobs,18))
+    else
+       if (k==0) allocate(odat_glb(nobs,9))
+       ntrc=0; nrect=0
     end if
     odat_glb=f0
     read(10,*)mat(:) ! Material
@@ -441,8 +513,9 @@ contains
   end subroutine GetVec_U
 
   ! Setup implicit solver
-  subroutine SetupKSPSolver
+  subroutine SetupKSPSolver(Krylov)
     implicit none
+    KSP :: Krylov
     call KSPSetType(Krylov,"gmres",ierr)
     call KSPGetPC(Krylov,PreCon,ierr)
     call PCSetType(PreCon,"asm",ierr)
@@ -456,34 +529,7 @@ contains
     call KSPSetFromOptions(Krylov,ierr)
   end subroutine SetupKSPSolver
 
-  ! Evaluation observation disp/stress
-  subroutine ObsEval 
-    implicit none
-    integer :: ob,i,j,ind(npel),row(eldof)
-    real(8) :: vectmp(3,1),strtmp(6),mattmp(3,npel),vecshp(npel,1),            &
-       estress(nip,6)
-    if ((nobs_loc)>0) then
-       do ob=1,nobs_loc
-          ind=onlst(ob,:)
-          do i=1,npel
-             row((/((i-1)*3+j,j=1,3)/))=(/((ind(i)-1)*3+j,j=1,3)/)
-          end do
-          mattmp=reshape(uu(row),(/3,npel/))
-          vecshp=reshape(oshape(ob,:),(/npel,1/))
-          vectmp=matmul(mattmp,vecshp) 
-          odat(ob,10:12)=odat(ob,10:12)+vectmp(:,1) ! Superpose
-          enodes=nodes(oel(ob),:) 
-          ecoords=coords(enodes,:)
-          call CalcElStress(ecoords,uu(row),mat(1),mat(2),estress(:,:))
-          strtmp=(/sum(estress(:,1)),sum(estress(:,2)),sum(estress(:,3)),      &
-                   sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)     &
-                   /dble(nip)
-          odat(ob,13:18)=odat(ob,13:18)+strtmp
-       end do 
-    end if
-  end subroutine ObsEval 
-
-  ! Gather obsdat by laster rank
+  ! Gather obsdat by last rank
   subroutine ObsGather
     implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
@@ -579,13 +625,13 @@ contains
   subroutine TestEshSol
     implicit none
     integer :: i
-    real(8) :: Em,vm,ellip(2,17),ocoord(2,3),sol(2,9),stress(6)
-    Em=f8; vm=f1/f4; stress=f0
+    real(8) :: Em,vm,ellip(2,17),ocoord(2,3),sol(2,9),instress(2,6)
+    Em=f8; vm=f1/f4; instress=f0
     ellip=reshape((/f0,f0,f0,f3,f2,f1,pi/f2,pi/f3,pi/f4,Em,vm,f0,f0,f1/f8,f0,  &
                     f0,f0,f0,f0,f0,f3,f2,f1,pi/f2,pi/f3,pi/f4,Em,vm,f0,f0,     &
-                    f0*f1/f8,f0,f0,f0/),(/2,17/),(/f0,f0/),(/2,1/))                                                      
+                    f0*f1/f8,f0,f0,f0/),(/2,17/),(/f0,f0/),(/2,1/))
     ocoord=reshape((/f1,f0,f2,f2,f0,f0/),(/2,3/),(/f0,f0/),(/2,1/))
-    call EshSol(Em,vm,stress,ellip,ocoord,sol)
+    call EshSol(Em,vm,instress,ellip,ocoord,sol)
     do i=1,size(sol,1) 
        print('(9(F0.8,1X))'),sol(i,:)
     end do

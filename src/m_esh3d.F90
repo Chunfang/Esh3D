@@ -5,11 +5,11 @@ module esh3d
 
 contains 
 
-  ! ! Eshelby's tensor S(6,6)
-  subroutine EshS4(vm,a,S4,PIvec)  
+  ! Eshelby's tensor S(6,6)
+  subroutine EshS2(vm,a,S2,PIvec)  
     implicit none  
     real(8) :: vm,a(3),Ifir(3),Isec(3,3),rate,theta,m,B,D,F,E,denom,           &
-        Sten(3,3,3,3),S4(6,6),PIvec(3)
+        S4(3,3,3,3),S2(6,6),PIvec(3)
     rate=a(1)/a(3)
     ! Check geometry category, assuming a(1)>a(2)>a(3)
     if (a(1)-a(2)<1.d-6*a(1) .and. a(2)-a(3)<1.d-6*a(1)) then ! Spherical case 
@@ -68,41 +68,41 @@ contains
        Isec(3,3)=(f4*pi/a(3)**2-Isec(3,1)-Isec(3,2))/f3
     end if
     denom=f8*pi*(f1-vm);
-    S4=f0 ! Sparse tensor
-    Sten(1,1,1,1)=(f3*a(1)**2*Isec(1,1)+(f1-2*vm)*Ifir(1))/denom
-    Sten(2,2,2,2)=(f3*a(2)**2*Isec(2,2)+(f1-2*vm)*Ifir(2))/denom
-    Sten(3,3,3,3)=(f3*a(3)**2*Isec(3,3)+(f1-2*vm)*Ifir(3))/denom
-    Sten(1,1,2,2)=(a(2)**2*Isec(1,2)-(f1-2*vm)*Ifir(1))/denom
-    Sten(2,2,3,3)=(a(3)**2*Isec(2,3)-(f1-2*vm)*Ifir(2))/denom
-    Sten(3,3,1,1)=(a(1)**2*Isec(3,1)-(f1-2*vm)*Ifir(3))/denom
-    Sten(1,1,3,3)=(a(3)**2*Isec(1,3)-(f1-2*vm)*Ifir(1))/denom
-    Sten(2,2,1,1)=(a(1)**2*Isec(2,1)-(f1-2*vm)*Ifir(2))/denom
-    Sten(3,3,2,2)=(a(2)**2*Isec(3,2)-(f1-2*vm)*Ifir(3))/denom
-    Sten(1,2,1,2)=((a(1)**2+a(2)**2)*Isec(1,2)+(f1-f2*vm)*(Ifir(1)+Ifir(2)))   &
+    S2=f0 ! Sparse tensor
+    S4(1,1,1,1)=(f3*a(1)**2*Isec(1,1)+(f1-2*vm)*Ifir(1))/denom
+    S4(2,2,2,2)=(f3*a(2)**2*Isec(2,2)+(f1-2*vm)*Ifir(2))/denom
+    S4(3,3,3,3)=(f3*a(3)**2*Isec(3,3)+(f1-2*vm)*Ifir(3))/denom
+    S4(1,1,2,2)=(a(2)**2*Isec(1,2)-(f1-2*vm)*Ifir(1))/denom
+    S4(2,2,3,3)=(a(3)**2*Isec(2,3)-(f1-2*vm)*Ifir(2))/denom
+    S4(3,3,1,1)=(a(1)**2*Isec(3,1)-(f1-2*vm)*Ifir(3))/denom
+    S4(1,1,3,3)=(a(3)**2*Isec(1,3)-(f1-2*vm)*Ifir(1))/denom
+    S4(2,2,1,1)=(a(1)**2*Isec(2,1)-(f1-2*vm)*Ifir(2))/denom
+    S4(3,3,2,2)=(a(2)**2*Isec(3,2)-(f1-2*vm)*Ifir(3))/denom
+    S4(1,2,1,2)=((a(1)**2+a(2)**2)*Isec(1,2)+(f1-f2*vm)*(Ifir(1)+Ifir(2)))   &
        /(2*denom)
-    Sten(2,3,2,3)=((a(2)**2+a(3)**2)*Isec(2,3)+(f1-f2*vm)*(Ifir(2)+Ifir(3)))   &
+    S4(2,3,2,3)=((a(2)**2+a(3)**2)*Isec(2,3)+(f1-f2*vm)*(Ifir(2)+Ifir(3)))   &
        /(2*denom)
-    Sten(3,1,3,1)=((a(3)**2+a(1)**2)*Isec(3,1)+(f1-f2*vm)*(Ifir(3)+Ifir(1)))   &
+    S4(3,1,3,1)=((a(3)**2+a(1)**2)*Isec(3,1)+(f1-f2*vm)*(Ifir(3)+Ifir(1)))   &
        /(2*denom)
-    Sten(1,3,1,3)=Sten(3,1,3,1)
+    S4(1,3,1,3)=S4(3,1,3,1)
     ! Original stress order 
-    !S4(1,:)=(/Sten(1,1,1,1),f0,f0,Sten(1,1,2,2),f0,Sten(1,1,3,3)/) 
-    !S4(2,:)=(/f0,f2*Sten(1,2,1,2),f0,f0,f0,f0/)
-    !S4(3,:)=(/f0,f0,f2*Sten(1,3,1,3),f0,f0,f0/)
-    !S4(4,:)=(/Sten(2,2,1,1),f0,f0,Sten(2,2,2,2),f0,Sten(2,2,3,3)/)
-    !S4(5,:)=(/f0,f0,f0,f0,f2*Sten(2,3,2,3),f0/)
-    !S4(6,:)=(/Sten(3,3,1,1),f0,f0,Sten(3,3,2,2),f0,Sten(3,3,3,3)/)
+    !S2(1,:)=(/S4(1,1,1,1),f0,f0,S4(1,1,2,2),f0,S4(1,1,3,3)/) 
+    !S2(2,:)=(/f0,f2*S4(1,2,1,2),f0,f0,f0,f0/)
+    !S2(3,:)=(/f0,f0,f2*S4(1,3,1,3),f0,f0,f0/)
+    !S2(4,:)=(/S4(2,2,1,1),f0,f0,S4(2,2,2,2),f0,S4(2,2,3,3)/)
+    !S2(5,:)=(/f0,f0,f0,f0,f2*S4(2,3,2,3),f0/)
+    !S2(6,:)=(/S4(3,3,1,1),f0,f0,S4(3,3,2,2),f0,S4(3,3,3,3)/)
     ! FEM stress order
-    S4(1,:)=(/Sten(1,1,1,1),Sten(1,1,2,2),Sten(1,1,3,3),f0,f0,f0/)
-    S4(2,:)=(/Sten(2,2,1,1),Sten(2,2,2,2),Sten(2,2,3,3),f0,f0,f0/)
-    S4(3,:)=(/Sten(3,3,1,1),Sten(3,3,2,2),Sten(3,3,3,3),f0,f0,f0/)
-    S4(4,:)=(/f0,f0,f0,f2*Sten(1,2,1,2),f0,f0/)
-    S4(5,:)=(/f0,f0,f0,f0,f2*Sten(2,3,2,3),f0/)
-    S4(6,:)=(/f0,f0,f0,f0,f0,f2*Sten(1,3,1,3)/)
+    S2(1,:)=(/S4(1,1,1,1),S4(1,1,2,2),S4(1,1,3,3),f0,f0,f0/)
+    S2(2,:)=(/S4(2,2,1,1),S4(2,2,2,2),S4(2,2,3,3),f0,f0,f0/)
+    S2(3,:)=(/S4(3,3,1,1),S4(3,3,2,2),S4(3,3,3,3),f0,f0,f0/)
+    S2(4,:)=(/f0,f0,f0,f2*S4(1,2,1,2),f0,f0/)
+    S2(5,:)=(/f0,f0,f0,f0,f2*S4(2,3,2,3),f0/)
+    S2(6,:)=(/f0,f0,f0,f0,f0,f2*S4(1,3,1,3)/)
     PIvec(2)=-f2*(Ifir(1)-Ifir(3))/(f8*pi)
     PIvec(3)=-f2*(Ifir(2)-Ifir(1))/(f8*pi)
     PIvec(1)=-f2*(Ifir(3)-Ifir(2))/(f8*pi)
-  end subroutine EshS4    
+  end subroutine EshS2    
   
   ! Eshelby's tensor D(3,3,3,3)
   subroutine EshD4(vm,a,x,D4,fderphi,tderpsi)
@@ -214,7 +214,7 @@ contains
     c3=sum((x**2)/((a**2+lambda)**4))
     Fvec=f2*x/(a**2+lambda)
     call buildtensors(Fvec,F_21,F_22)
-    if (lambda==0) then 
+    if (lambda==f0) then 
        fderlambda=f0 
     else
        fderlambda=Fvec/c1
@@ -282,7 +282,7 @@ contains
     do q=1,3 
        do p=1,3 
           do r=1,3 
-             if (lambda==0) then 
+             if (lambda==f0) then 
                 tderlambda(q,p,r)=f0
              else
                 tderlambda(q,p,r)=(-f1/c1)*(sderlambda(q,p)*fderc1(r)-         &
@@ -383,6 +383,110 @@ contains
     end do
   end subroutine EshD4   
 
+  ! Eshelby's global coefficient matrix Keig(6*nellip,6*nellip) 
+  subroutine EshKeig(Em,vm,ellip,Keig)
+    implicit none
+    integer :: i,j,k,l,nellip
+    real(8) :: Em,vm,ellip(:,:),Keig(:,:),S2(6,6),D4(3,3,3,3),D2(6,6),a(3),    &
+       ang(3),R_init(3,3),Rb_init(3,3),R(3,3),Rb(3,3),R2(3,3),R2b(3,3),        &
+       exh(3,3),xobs(3),PIvec(3),Cm(6,6),Ch(6,6),S2g(6,6),D2g(6,6),fderphi(3), &
+       tderpsi(3,3,3),tmp
+    call CMat(Em,vm,Cm)
+    nellip=size(ellip,1); Keig=f0
+    do i=1,nellip
+       a=ellip(i,4:6)
+       ! Stage a1>=a2>=a3
+       exh=f0
+       do k=1,2
+          do l=2,3
+             if (a(k)<a(l)) then
+                exh(k,l)=f1
+                tmp=a(k)
+                a(k)=a(l)
+                a(l)=tmp
+             end if 
+          end do
+       end do
+       ! Initial rotation matrices due to axis exchange
+       ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
+       call Ang2Mat(ang,R_init,f1)
+       call Ang2Mat(ang,Rb_init,-f1)
+       ! Rotation matrices w.r.t the ellipsoid
+       ang=ellip(i,7:9)
+       call Ang2Mat(ang,R,f1)
+       call Ang2Mat(ang,Rb,-f1) 
+       R2=matmul(R_init,Rb)  ! Global=>ellipsoid 
+       R2b=matmul(R,Rb_init) ! Ellipsoid=>global
+       call EshS2(vm,a,S2,PIvec)
+       call T2Rot(S2,R2b,S2g) ! Rotate to global
+       call CMat(ellip(i,10),ellip(i,11),Ch)
+       k=(i-1)*6+1
+       Keig(k:k+5,k:k+5)=Cm-matmul((Cm-Ch),S2g)
+       do j=1,nellip
+          if (j/=i) then  
+             a=ellip(j,4:6)
+             ! Stage a1>=a2>=a3
+             exh=f0
+             do k=1,2
+                do l=2,3
+                   if (a(k)<a(l)) then
+                      exh(k,l)=f1
+                      tmp=a(k)
+                      a(k)=a(l)
+                      a(l)=tmp
+                   end if 
+                end do
+             end do
+             ! Initial rotation matrices due to axis exchange
+             ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
+             call Ang2Mat(ang,R_init,f1)
+             call Ang2Mat(ang,Rb_init,-f1)
+             ! Rotation matrices w.r.t the ellipsoid
+             ang=ellip(j,7:9)
+             call Ang2Mat(ang,R,f1)
+             call Ang2Mat(ang,Rb,-f1) 
+             R2=matmul(R_init,Rb)  ! Global=>ellipsoid 
+             R2b=matmul(R,Rb_init) ! Ellipsoid=>global
+             xobs=ellip(i,:3)-ellip(j,:3) ! i-th centroid at j-th coordinate
+             xobs=matmul(R2,xobs) 
+             if (xobs(1)**2/a(1)**2+xobs(2)**2/a(2)**2+xobs(3)**2/a(3)**2<=f1) &
+                then
+                call EshS2(vm,a,D2,PIvec)
+             else  
+                call EshD4(vm,a,xobs,D4,fderphi,tderpsi)
+                call T4T2(D4,D2)
+             end if
+             call T2Rot(D2,R2b,D2g)
+             k=(i-1)*6+1; l=(j-1)*6+1
+             Keig(k:k+5,l:l+5)=-matmul((Cm-Ch),D2g)
+             !Keig(k:k+5,l:l+5)=f0 ! Non-interacting inclusions
+          end if
+       end do
+    end do
+  end subroutine EshKeig
+
+  subroutine EshFeig(Em,vm,instress,ellip,Feig,init)
+    implicit none  
+    integer :: i,j,nellip
+    logical,optional :: init 
+    logical:: initval
+    real(8) :: instress(:,:),ellip(:,:),Em,vm,Cm(6,6),Ch(6,6),strain(6),Feig(:)
+    if (present(init)) then 
+       initval=init
+    else
+       initval=.false. 
+    end if
+    call CMat(Em,vm,Cm)
+    nellip=size(ellip,1); Feig=f0
+    do i=1,nellip
+       call CMat(ellip(i,10),ellip(i,11),Ch)
+       j=(i-1)*6+1 
+       call SolveSix(Cm,instress(i,:),strain)
+       Feig(j:j+5)=matmul((Cm-Ch),strain)
+       if (initval) Feig(j:j+5)=Feig(j:j+5)+matmul(Ch,ellip(i,12:17))
+    end do
+  end subroutine EshFeig
+
   subroutine EshDisp(vm,eigen,fderphi,tderpsi,u)
     implicit none 
     integer :: i,j,k
@@ -403,26 +507,41 @@ contains
     ut=premult*(ut-f2*vm*SumDiag*fderphit-f4*(f1-vm)*matmul(MatEigen,fderphit))
     u=ut(:,1)
   end subroutine EshDisp
+  
+  ! Translate eigenstrain from inclusion coordinate to global coordinate
+  subroutine EigIncl2Glb(ellip)
+    implicit none
+    integer :: i,nellip
+    real(8) :: ellip(:,:),Teigen(3,3),R(3,3),ang(3)
+    nellip=size(ellip,1)
+    do i=1,nellip
+       call Vec2Mat(ellip(i,12:17),Teigen)
+       ang=ellip(i,7:9)
+       call Ang2Mat(ang,R,f1)
+       Teigen=matmul(matmul(R,Teigen),transpose(R))
+       ellip(i,12:17)=(/Teigen(1,1),Teigen(2,2),Teigen(3,3),Teigen(1,2),       &
+          Teigen(2,3),Teigen(1,3)/)
+    end do   
+  end subroutine EigIncl2Glb  
 
-  subroutine EshSol(Em,vm,stress,ellip,ocoord,sol)
+  subroutine EshIncSol(Em,vm,ellip,ocoord,sol)
     implicit none
     integer :: i,j,k,l,m,n,nobs,nellip
-    real(8) :: Em,vm,Eh,vh,ocoord(:,:),ellip(:,:),stress(6),sol(:,:) !In(out)put
+    real(8) :: Em,vm,ocoord(:,:),ellip(:,:),sol(:,:) !,Eh,vh
     ! ellip(nellip,17): 1-3 ellipsoid centroid coordinate, 4-6 semi-axises, 7-9
     ! rotation angles around x,y and z axises, 10,11 inclusion Young's modulus 
     ! and Poisson's ratio, 12-17 eigen strain 
-    ! stress(6): remote stress
     ! sol(nobs,9): 1-3 displacement, 4-9 stress 
     real(8) :: ang(3),a(3),tmp,exh(3,3),R_init(3,3),Rb_init(3,3),R(3,3),       &
-       Rb(3,3),PIvec(3),Tstress(3,3),Cm(6,6),straint(6,1),stresst(6,1),        &
-       eigent(6,1),Ch(6,6),dC(6,6),vert(3,1),D4(3,3,3,3),fderphi(3),           &
-       tderpsi(3,3,3),disp(3),dispt(3,1),Ttmp(3,3),Vtmp(6,1),Teigen(3,3),S4(6,6)
+       Rb(3,3),PIvec(3),Tstress(3,3),Cm(6,6),stresst(6,1),eigent(6,1),         &
+       vert(3,1),D4(3,3,3,3),fderphi(3),tderpsi(3,3,3),disp(3),dispt(3,1),     &
+       Ttmp(3,3),Vtmp(6,1),Teigen(3,3),S2(6,6) !straint(6,1),Ch(6,6),dC(6,6),
     nobs=size(ocoord,1); nellip=size(ellip,1)
     !sol=f0 ! Initial solution space
     do i=1,nellip
        a=ellip(i,4:6)
        ! Stage a1>=a2>=a3
-       exh=0
+       exh=f0
        do k=1,2
           do l=2,3
              if (a(k)<a(l)) then
@@ -442,24 +561,129 @@ contains
        call Ang2Mat(ang,R,f1)
        call Ang2Mat(ang,Rb,-f1) 
        ! Eshelby's tensor
-       call EshS4(vm,a,S4,PIvec) 
+       call EshS2(vm,a,S2,PIvec) 
+
+       !call Vec2Mat(instress(i,:),Tstress) 
+       !Tstress=matmul(matmul(matmul(R_init,Rb),Tstress),                       &
+       !        transpose(matmul(R_init,Rb)))
+       !stresst(:,1)=(/Tstress(1,1),Tstress(2,2),Tstress(3,3),Tstress(1,2),     &
+       !             Tstress(2,3),Tstress(1,3)/)    
+
        ! Rotate stress and initial eigenstrain against oblique ellipsoid
-       call Vec2Mat(stress,Tstress) 
+       call Vec2Mat(ellip(i,12:17),Teigen)    
+       Teigen=matmul(matmul(matmul(R_init,Rb),Teigen),                         &
+              transpose(matmul(R_init,Rb)))
+       eigent(:,1)=(/Teigen(1,1),Teigen(2,2),Teigen(3,3),Teigen(1,2),          &
+                   Teigen(2,3),Teigen(1,3)/) 
+       !Eh=ellip(i,10); vh=ellip(i,11)
+       call CMat(Em,vm,Cm)!; call CMat(Eh,vh,Ch); dC=Cm-Ch
+       !call SolveSix(Cm,stresst,straint)
+       !call SolveSix(Cm-matmul(dC,S2),matmul(dC,straint)+matmul(Ch,eigent),    &
+       !   eigent)
+       !call Vec2Mat(eigent(:,1),Teigen)
+       do j=1,nobs
+          vert(:,1)=ocoord(j,:)-ellip(i,:3) ! Relative coordinate
+          vert=matmul(matmul(R_init,Rb),vert)
+          call EshD4(vm,a,vert(:,1),D4,fderphi,tderpsi) 
+          call EshDisp(vm,eigent(:,1),fderphi,tderpsi,disp)
+          dispt(:,1)=disp
+          ! Rotate back
+          dispt=matmul(matmul(R,Rb_init),dispt)
+          !dispt=matmul(transpose(matmul(R_init,Rb)),dispt)
+          ! Record displacement
+          sol(j,:3)=sol(j,:3)+dispt(:,1)
+          if (vert(1,1)**2/a(1)**2+vert(2,1)**2/a(2)**2+vert(3,1)**2/a(3)**2   &
+             <=1) then ! J-th obs interior to i-th inclusion 
+             ! Elastic stress
+             !stresst=stresst+matmul(Cm,(matmul(S2,eigent)-eigent))
+             stresst=matmul(Cm,(matmul(S2,eigent)-eigent))
+          else ! J-th obs exterior to i-th inclusion
+             Ttmp=f0 
+             do k=1,3  
+                do l=1,3 
+                   do m=1,3 
+                      do n=1,3 
+                         Ttmp(k,l)=Ttmp(k,l)+D4(k,l,m,n)*Teigen(m,n) 
+                      end do
+                   end do
+                end do
+             end do
+             Vtmp(:,1)=(/Ttmp(1,1),Ttmp(2,2),Ttmp(3,3),Ttmp(1,2),Ttmp(2,3),    &
+                       Ttmp(1,3)/)
+             ! Elastic stress
+             !stresst=stresst+matmul(Cm,Vtmp)
+             stresst=matmul(Cm,Vtmp)
+          end if
+          ! Rotate back to origin coordinate
+          call Vec2Mat(stresst(:,1),Tstress)
+          Tstress=matmul(matmul(matmul(R,Rb_init),Tstress),                    &
+                  transpose(matmul(R,Rb_init)))
+          !stresst(:,1)=(/Tstress(1,1),Tstress(2,2),Tstress(3,3),               &
+          !             Tstress(1,2),Tstress(2,3),Tstress(1,3)/) 
+          ! Record stress         
+          sol(j,4:9)=sol(j,4:9)+(/Tstress(1,1),Tstress(2,2),Tstress(3,3),       &
+                       Tstress(1,2),Tstress(2,3),Tstress(1,3)/)
+          !stresst(:,1)=stress ! Reset to background stress 
+       end do ! nobs
+    end do ! nellip
+  end subroutine EshIncSol
+
+  subroutine EshSol(Em,vm,instress,ellip,ocoord,sol)
+    implicit none
+    integer :: i,j,k,l,m,n,nobs,nellip
+    real(8) :: Em,vm,Eh,vh,ocoord(:,:),ellip(:,:),instress(:,:),sol(:,:) 
+    ! ellip(nellip,17): 1-3 ellipsoid centroid coordinate, 4-6 semi-axises, 7-9
+    ! rotation angles around x,y and z axises, 10,11 inclusion Young's modulus 
+    ! and Poisson's ratio, 12-17 eigen strain 
+    ! instress(nellip,6): effective remote stress for inclusions
+    ! sol(nobs,9): 1-3 displacement, 4-9 stress 
+    real(8) :: ang(3),a(3),tmp,exh(3,3),R_init(3,3),Rb_init(3,3),R(3,3),       &
+       Rb(3,3),PIvec(3),Tstress(3,3),Cm(6,6),straint(6,1),stresst(6,1),        &
+       eigent(6,1),Ch(6,6),dC(6,6),vert(3,1),D4(3,3,3,3),fderphi(3),           &
+       tderpsi(3,3,3),disp(3),dispt(3,1),Ttmp(3,3),Vtmp(6,1),Teigen(3,3),S2(6,6)
+    nobs=size(ocoord,1); nellip=size(ellip,1)
+    !sol=f0 ! Initial solution space
+    do i=1,nellip
+       a=ellip(i,4:6)
+       ! Stage a1>=a2>=a3
+       exh=f0
+       do k=1,2
+          do l=2,3
+             if (a(k)<a(l)) then
+                exh(k,l)=f1
+                tmp=a(k)
+                a(k)=a(l)
+                a(l)=tmp
+             end if 
+          end do
+       end do
+       ! Initial rotation matrices due to axis exchange
+       ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
+       call Ang2Mat(ang,R_init,f1)
+       call Ang2Mat(ang,Rb_init,-f1)
+       ! Rotation matrices w.r.t the ellipsoid
+       ang=ellip(i,7:9)
+       call Ang2Mat(ang,R,f1)
+       call Ang2Mat(ang,Rb,-f1) 
+       ! Eshelby's tensor
+       call EshS2(vm,a,S2,PIvec) 
+       ! Rotate stress and initial eigenstrain against oblique ellipsoid
+       call Vec2Mat(instress(i,:),Tstress) 
        Tstress=matmul(matmul(matmul(R_init,Rb),Tstress),                       &
                transpose(matmul(R_init,Rb)))
        stresst(:,1)=(/Tstress(1,1),Tstress(2,2),Tstress(3,3),Tstress(1,2),     &
                     Tstress(2,3),Tstress(1,3)/)    
        call Vec2Mat(ellip(i,12:17),Teigen)    
-       !Teigen=matmul(matmul(matmul(R_init,Rb),Teigen),                         &
-       !       transpose(matmul(R_init,Rb)))
-       !print*, matmul(S4,eigent)
-       Teigen=matmul(matmul(R_init,Teigen),transpose(R_init))
+       Teigen=matmul(matmul(matmul(R_init,Rb),Teigen),                         &
+              transpose(matmul(R_init,Rb)))
+       !Teigen=matmul(matmul(R_init,Teigen),transpose(R_init))
+       !print*, matmul(S2,eigent)
        eigent(:,1)=(/Teigen(1,1),Teigen(2,2),Teigen(3,3),Teigen(1,2),          &
                    Teigen(2,3),Teigen(1,3)/) 
        Eh=ellip(i,10); vh=ellip(i,11)
        call CMat(Em,vm,Cm); call CMat(Eh,vh,Ch); dC=Cm-Ch
        call SolveSix(Cm,stresst,straint)
-       call SolveSix(Cm-matmul(dC,S4),matmul(dC,straint)+matmul(Ch,eigent),    &
+       call SolveSix(Cm-matmul(dC,S2),matmul(dC,straint)+matmul(Ch,eigent),    &
           eigent)
        call Vec2Mat(eigent(:,1),Teigen)
        do j=1,nobs
@@ -475,8 +699,9 @@ contains
           sol(j,:3)=sol(j,:3)+dispt(:,1)
           if (vert(1,1)**2/a(1)**2+vert(2,1)**2/a(2)**2+vert(3,1)**2/a(3)**2   &
              <=1) then ! J-th obs interior to i-th inclusion 
-             ! Total elastic stress
-             stresst=stresst+matmul(Cm,(matmul(S4,eigent)-eigent))
+             ! Elastic stress
+             !stresst=stresst+matmul(Cm,(matmul(S2,eigent)-eigent))
+             stresst=matmul(Cm,(matmul(S2,eigent)-eigent))
           else ! J-th obs exterior to i-th inclusion
              Ttmp=f0 
              do k=1,3  
@@ -490,21 +715,64 @@ contains
              end do
              Vtmp(:,1)=(/Ttmp(1,1),Ttmp(2,2),Ttmp(3,3),Ttmp(1,2),Ttmp(2,3),    &
                        Ttmp(1,3)/)
-             ! Total elastic stress
-             stresst=stresst+matmul(Cm,Vtmp)
+             ! Elastic stress
+             !stresst=stresst+matmul(Cm,Vtmp)
+             stresst=matmul(Cm,Vtmp)
           end if
           ! Rotate back to origin coordinate
           call Vec2Mat(stresst(:,1),Tstress)
           Tstress=matmul(matmul(matmul(R,Rb_init),Tstress),                    &
                   transpose(matmul(R,Rb_init)))
-          stresst(:,1)=(/Tstress(1,1),Tstress(2,2),Tstress(3,3),               &
-                       Tstress(1,2),Tstress(2,3),Tstress(1,3)/) 
+          !stresst(:,1)=(/Tstress(1,1),Tstress(2,2),Tstress(3,3),               &
+          !             Tstress(1,2),Tstress(2,3),Tstress(1,3)/) 
           ! Record stress         
-          sol(j,4:9)=sol(j,4:9)+stresst(:,1)
-          stresst(:,1)=stress ! Reset to background stress 
+          sol(j,4:9)=sol(j,4:9)+(/Tstress(1,1),Tstress(2,2),Tstress(3,3),       &
+                       Tstress(1,2),Tstress(2,3),Tstress(1,3)/)
+          !stresst(:,1)=stress ! Reset to background stress 
        end do ! nobs
     end do ! nellip
   end subroutine EshSol    
+
+  ! Translation 3x3x3x3 tensor to 6x6, FE order 1-11,2-22,3-33,4-12,5-23,6-13
+  subroutine T4T2(T4,T2)
+    implicit none
+    real(8) :: T4(3,3,3,3),T2(6,6)
+    T2(1,:)=(/T4(1,1,1,1),T4(1,1,2,2),T4(1,1,3,3),T4(1,1,1,2)+T4(1,1,2,1),     &
+              T4(1,1,2,3)+T4(1,1,3,2),T4(1,1,1,3)+T4(1,1,3,1)/)
+    T2(2,:)=(/T4(2,2,1,1),T4(2,2,2,2),T4(2,2,3,3),T4(2,2,1,2)+T4(2,2,2,1),     &
+              T4(2,2,2,3)+T4(2,2,3,2),T4(2,2,1,3)+T4(2,2,3,1)/)
+    T2(3,:)=(/T4(3,3,1,1),T4(3,3,2,2),T4(3,3,3,3),T4(3,3,1,2)+T4(3,3,2,1),     &
+              T4(3,3,2,3)+T4(3,3,3,2),T4(3,3,1,3)+T4(3,3,3,1)/)
+    T2(4,:)=(/T4(1,2,1,1),T4(1,2,2,2),T4(1,2,3,3),T4(1,2,1,2)+T4(1,2,2,1),     &
+              T4(1,2,2,3)+T4(1,2,3,2),T4(1,2,1,3)+T4(1,2,3,1)/)
+    T2(5,:)=(/T4(2,3,1,1),T4(2,3,2,2),T4(2,3,3,3),T4(2,3,1,2)+T4(2,3,2,1),     &
+              T4(2,3,2,3)+T4(2,3,3,2),T4(2,3,1,3)+T4(2,3,3,1)/)
+    T2(6,:)=(/T4(1,3,1,1),T4(1,3,2,2),T4(1,3,3,3),T4(1,3,1,2)+T4(1,3,2,1),     & 
+              T4(1,3,2,3)+T4(1,3,3,2),T4(1,3,1,3)+T4(1,3,3,1)/)   
+  end subroutine T4T2
+
+  ! Rotate T2(6,6) tensor by R(3,3), FE order  
+  subroutine T2Rot(T2,R,T2R)
+    implicit none  
+    real(8) :: T2(6,6),T2R(6,6),R(3,3),matR(6,6),matRIv(6,6)
+    matR(:,1)=(/R(1,1)**2,R(1,2)**2,R(1,3)**2,f2*R(1,1)*R(1,2),                &
+                f2*R(1,2)*R(1,3),f2*R(1,1)*R(1,3)/)
+    matR(:,2)=(/R(2,1)**2,R(2,2)**2,R(2,3)**2,f2*R(2,1)*R(2,2),                &
+               f2*R(2,2)*R(2,3),f2*R(2,1)*R(2,3)/)
+    matR(:,3)=(/R(3,1)**2,R(3,2)**2,R(3,3)**2,f2*R(3,1)*R(3,2),                &
+                f2*R(3,2)*R(3,3),f2*R(3,1)*R(3,3)/)
+    matR(:,4)=(/R(1,1)*R(2,1),R(1,2)*R(2,2),R(1,3)*R(2,3),R(1,1)*R(2,2)+       &
+                R(1,2)*R(2,1),R(1,2)*R(2,3)+R(1,3)*R(2,2),R(1,1)*R(2,3)+       &
+                R(1,3)*R(2,1)/)
+    matR(:,5)=(/R(2,1)*R(3,1),R(2,2)*R(3,2),R(2,3)*R(3,3),R(2,1)*R(3,2)+       &
+                R(2,2)*R(3,1),R(2,2)*R(3,3)+R(2,3)*R(3,2),R(2,1)*R(3,3)+       &
+                R(2,3)*R(3,1)/)
+    matR(:,6)=(/R(1,1)*R(3,1),R(1,2)*R(3,2),R(1,3)*R(3,3),R(1,1)*R(3,2)+       &
+                R(1,2)*R(3,1),R(1,2)*R(3,3)+R(1,3)*R(3,2),R(1,1)*R(3,3)+       &
+                R(1,3)*R(3,1)/)
+    call MatInv(matR,matRIv)
+    T2R=matmul(matmul(matRIv,T2),matR)
+  end subroutine T2Rot
 
   subroutine OkSol(E,v,rects,ocoord,crest,sol) 
     ! Okada wrapper for multiple rectangle faults
