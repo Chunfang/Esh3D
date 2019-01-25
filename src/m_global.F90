@@ -32,8 +32,8 @@ module global
   character(12) :: stype
   character(256) :: output_file
   logical :: full,half,fini,incl,inho
-  Vec :: Vec_F,Vec_U,Vec_Feig,Vec_Eig,Vec_incl
-  Mat :: Mat_K,Mat_Keig
+  Vec :: Vec_F,Vec_U,Vec_Feig,Vec_Eig,Vec_incl,Vec_FixC,Vec_Fix,Vec_FixF
+  Mat :: Mat_K,Mat_Keig,Mat_Kfull
   KSP :: KryInc,Krylov
   PC :: PreCon
   ! Local element/side/node variables
@@ -54,15 +54,19 @@ module global
 contains
 
   ! Form local [K]
-  subroutine FormLocalK(el,k,indx)
+  subroutine FormLocalK(el,k,indx,kfix)
     implicit none
     integer :: el,indx(:)
     real(8) :: k(:,:)
+    logical, optional :: kfix
+    logical :: fix
+    fix=.true.
+    if (present(kfix)) fix=kfix
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     E=mat(1); nu=mat(2)
     call FormElK(ecoords,E,nu,k)
-    call FixBCinLocalK(el,k)
+    if (fix) call FixBCinLocalK(el,k)
     call FormLocalIndx(enodes,indx)
   end subroutine FormLocalK
 
@@ -82,6 +86,22 @@ contains
        end do
     end do
   end subroutine FixBCinLocalK
+
+  subroutine FormMatKfull
+    implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#include "petsc.h"
+#endif
+    integer :: i
+    call MatDuplicate(Mat_K,MAT_DO_NOT_COPY_VALUES,Mat_Kfull,ierr)
+    do i=1,nels
+       call FormLocalK(i,k,indx,kfix=.false.)
+       indx=indxmap(indx,2)
+       call MatSetValues(Mat_Kfull,eldof,indx,eldof,indx,k,Add_Values,ierr)
+    end do
+    call MatAssemblyBegin(Mat_Kfull,Mat_Final_Assembly,ierr)
+    call MatAssemblyEnd(Mat_Kfull,Mat_Final_Assembly,ierr)
+  end subroutine FormMatKfull
 
   ! Apply nodal force
   subroutine ApplyNodalForce(node,vvec)
@@ -209,7 +229,7 @@ contains
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
 #endif
-    integer :: i,el,j,j1
+    integer :: i,el,j
     real(8) :: mattmp(3,3),vectmp(3),vectmp0(3),matstr(3,3),vecstr(6),         &
        estress(nip,6)
     call VecZeroEntries(Vec_F,ierr) ! Incremental numerical RHS
@@ -245,20 +265,77 @@ contains
        vectmp=matmul(mattmp,vectmp)
        call ApplyTraction(surfel(i),surfside(i),vectmp)
     end do
-    if (fini) then ! Cancel fixed dofs only for finite domain
-       do i=1,nfix 
-          vectmp=-solfix(i,:3) 
-          do j=1,3
-             if (bc(ndfix(i),j)==0) then
-                j1=(nl2g(ndfix(i),2)-1)*3+j-1
-                call VecSetValue(Vec_F,j1,vectmp(j),Add_Values,ierr)
-            end if
-         end do
-       end do     
-    end if
     call VecAssemblyBegin(Vec_F,ierr)
     call VecAssemblyEnd(Vec_F,ierr)
+    !if (fini) then ! Cancel fixed dofs only for finite domain
+    !   do i=1,nfix 
+    !      do j=1,3
+    !         if (bcfix(i,j)==0) then
+    !            vectmp(1)=-(solfix(i,j)-uu0((ndfix(i)-1)*3+j)) 
+    !            j1=(nl2g(ndfix(i),2)-1)*3+j-1
+    !            call VecSetValue(Vec_F,j1,vectmp(1),Add_Values,ierr)
+    !         end if
+    !      end do
+    !   end do     
+    !end if
+    if (fini) call FixBndVecF
   end subroutine MatchSurf 
+
+  subroutine GetVecFixC
+    implicit none  
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#include "petsc.h"
+#endif
+    integer :: i,j,j1
+    call MatGetDiagonal(Mat_K,Vec_FixC,ierr)
+    do i=1,size(coords,1)
+       do j=1,3
+          if (bc(i,j)/=0) then
+             j1=(nl2g(i,2)-1)*3+j-1
+             call VecSetValue(Vec_FixC,j1,f1,Insert_Values,ierr)
+          end if
+       end do
+    end do
+    call VecAssemblyBegin(Vec_FixC,ierr)
+    call VecAssemblyEnd(Vec_FixC,ierr)
+  end subroutine GetVecFixC
+
+  ! Modify RHS for fixed value boundary condition: Mat_Kfull,solfix->Vec_F
+  subroutine FixBndVecF
+    implicit none  
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#include "petsc.h"
+#endif
+    integer :: i,j,j1
+    real(8) :: val
+    do i=1,nfix 
+       do j=1,3
+          if (bcfix(i,j)==0) then
+             val=solfix(i,j)-uu0((ndfix(i)-1)*3+j) 
+             j1=(nl2g(ndfix(i),2)-1)*3+j-1
+             call VecSetValue(Vec_Fix,j1,val,Insert_Values,ierr)
+             call VecSetValue(Vec_F,j1,-val,Insert_Values,ierr)
+          end if
+       end do
+    end do 
+    call VecAssemblyBegin(Vec_Fix,ierr)
+    call VecAssemblyEnd(Vec_Fix,ierr)
+    call MatMult(Mat_Kfull,Vec_Fix,Vec_FixF,ierr)
+    call VecAssemblyBegin(Vec_F,ierr)
+    call VecAssemblyEnd(Vec_F,ierr)
+    call VecPointWiseMult(Vec_F,Vec_F,Vec_FixC,ierr)
+    do i=1,nfix 
+       do j=1,3
+          if (bcfix(i,j)==0) then
+             j1=(nl2g(ndfix(i),2)-1)*3+j-1
+             call VecSetValue(Vec_FixF,j1,f0,Insert_Values,ierr)
+          end if
+       end do
+    end do 
+    call VecAssemblyBegin(Vec_FixF,ierr)
+    call VecAssemblyEnd(Vec_FixF,ierr)
+    call VecAXPY(Vec_F,f1,Vec_FixF,ierr) 
+  end subroutine FixBndVecF
 
   ! Observation/inclusion nodal base 
   subroutine GetObsNd(strng)
@@ -518,6 +595,10 @@ contains
 #endif
     integer :: nellip,i,j,j1,j2,idx(6)
     real(8) :: eigen(:,:),vec(6),strain(6)
+    ! To use LAPPACK instead
+    real(8),allocatable :: matinv(:,:),vectmp(:),work(:)
+    integer,allocatable :: ipiv(:)
+    integer :: info
     nellip=size(eigen,1)
     call VecGetOwnershipRange(Vec_Eig,j1,j2,ierr)
     do i=1,nellip
@@ -527,6 +608,25 @@ contains
        call MPI_AllReduce(vec,strain,6,MPI_Real8,MPI_Sum,MPI_Comm_World,ierr)
        eigen(i,:)=strain
     end do
+    ! LAPPACK matrix inversion
+    j=6*nellip
+    allocate(matinv(j,j),vectmp(j),work(j),ipiv(j))
+
+    !print('(30(ES11.2E3,X))'), Feig
+    !do i=1,nellip
+    !   vectmp((/((i-1)*6+j,j=1,6)/))=eigen(i,:)
+    !end do
+    !print('(30(ES11.2E3,X))'), matmul(Keig,vectmp)
+
+    matinv=Keig
+    call DGETRF(j,j,matinv,j,ipiv,info)
+    call DGETRI(j,matinv,j,ipiv,work,j,info)
+    vectmp=matmul(matinv,Feig)
+    do i=1,nellip
+       eigen(i,:)=vectmp((/((i-1)*6+j,j=1,6)/)) 
+    end do
+
+    !print('(30(ES11.2E3,X))'), matmul(Keig,vectmp)
   end subroutine UpInhoEigen
   
   ! Evaluate inclusions stress changes uu (solok) -> instress(nellip,6)

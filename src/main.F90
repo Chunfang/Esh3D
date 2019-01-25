@@ -180,6 +180,7 @@ program main
      end do
      call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
      call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
+     if (fini) call FormMatKfull
 
      ! Read traction surface (surfel, surfside, surftrc, surf) 
      allocate(surfel_glb(ntrc),surfside_glb(ntrc),surftrc_glb(ntrc,3),         &
@@ -276,7 +277,7 @@ program main
   ! Global linear system matrix for interactive inhomogeneities  
   if (inho) then
      n=nellip*6
-     incl_bw=nellip*3+(nellip-1)*6
+     incl_bw=3+(nellip-1)*6
      allocate(Keig(n,n),Feig(n))
      call EshKeig(mat(1),mat(2),ellip,Keig)
      !do i=1,nellip*6
@@ -285,10 +286,12 @@ program main
      ! Entries of one stress tensor are not split by different ranks
      call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nellip,Vec_incl,ierr)
      call VecGetLocalSize(Vec_incl,n_incl,ierr)
+     call VecDestroy(Vec_incl,ierr)
      call MatCreateAIJ(Petsc_Comm_World,n_incl*6,n_incl*6,n,n,incl_bw,         &
         Petsc_Null_Integer,incl_bw,Petsc_Null_Integer,Mat_Keig,ierr)
      call MatSetOption(Mat_Keig,Mat_New_Nonzero_Allocation_Err,Petsc_False,    &
         ierr)
+     !call MatCreateDense(Petsc_Comm_World,n_incl*6,n_incl*6,n,n,Petsc_Null_Scalar,Mat_Keig,ierr)
      ! From [Keig]
      if (rank==nprcs-1) call MatSetValues(Mat_Keig,n,(/(i,i=0,n-1)/),n,        &
         (/(i,i=0,n-1)/),Keig,Insert_Values,ierr)
@@ -300,10 +303,9 @@ program main
 #else
      call KSPSetOperators(KryInc,Mat_Keig,Mat_Keig,ierr)
 #endif
-     call SetupKSPSolver(KryInc)
+     !call SetupKSPSolver(KryInc)
      call VecCreateMPI(Petsc_Comm_World,n_incl*6,n,Vec_Feig,ierr)
      call VecDuplicate(Vec_Feig,Vec_Eig,ierr)
-     call VecDestroy(Vec_incl,ierr)
   end if
 
   ! Full space Eshelby's solution
@@ -346,7 +348,13 @@ program main
 #endif
      call SetupKSPSolver(Krylov)
      call VecDuplicate(Vec_U,Vec_F,ierr); call VecZeroEntries(Vec_F,ierr)
-
+     if (fini) then ! Coefficient of fixed dofs
+        call VecDuplicate(Vec_U,Vec_FixC,ierr)
+        call GetVecFixC
+        call VecDuplicate(Vec_U,Vec_Fix,ierr)
+        call VecZeroEntries(Vec_Fix,ierr)
+        call VecDuplicate(Vec_U,Vec_FixF,ierr)
+     end if
      ! Solve initial boundary problem for nonzero surface loading
      allocate(resid(ntrc_loc)) ! Traction magnitudes
      resid=sqrt(surftrc(:,1)**2+surftrc(:,2)**2+surftrc(:,3)**2)
@@ -621,20 +629,5 @@ contains
     call EshDisp(vm,eigen,fderphi,tderpsi,u)
     print('(3(F0.8,1X))'), u
   end subroutine TestEshD4    
-
-  subroutine TestEshSol
-    implicit none
-    integer :: i
-    real(8) :: Em,vm,ellip(2,17),ocoord(2,3),sol(2,9),instress(2,6)
-    Em=f8; vm=f1/f4; instress=f0
-    ellip=reshape((/f0,f0,f0,f3,f2,f1,pi/f2,pi/f3,pi/f4,Em,vm,f0,f0,f1/f8,f0,  &
-                    f0,f0,f0,f0,f0,f3,f2,f1,pi/f2,pi/f3,pi/f4,Em,vm,f0,f0,     &
-                    f0*f1/f8,f0,f0,f0/),(/2,17/),(/f0,f0/),(/2,1/))
-    ocoord=reshape((/f1,f0,f2,f2,f0,f0/),(/2,3/),(/f0,f0/),(/2,1/))
-    call EshSol(Em,vm,instress,ellip,ocoord,sol)
-    do i=1,size(sol,1) 
-       print('(9(F0.8,1X))'),sol(i,:)
-    end do
-  end subroutine TestEshSol
 
 end program main
