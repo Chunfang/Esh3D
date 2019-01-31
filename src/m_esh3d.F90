@@ -1,3 +1,6 @@
+! Copyright (C) 2011-present Chunfang Meng. All rights reserved. This file is 
+! part of Esh3D. See ../COPYING for license information.
+
 module esh3d
 
   use utils  
@@ -604,7 +607,7 @@ contains
           Tstress=matmul(matmul(matmul(R,Rb_init),Tstress),                    &
                   transpose(matmul(R,Rb_init)))
           ! Record stress         
-          sol(j,4:9)=sol(j,4:9)+(/Tstress(1,1),Tstress(2,2),Tstress(3,3),       &
+          sol(j,4:9)=sol(j,4:9)+(/Tstress(1,1),Tstress(2,2),Tstress(3,3),      &
                        Tstress(1,2),Tstress(2,3),Tstress(1,3)/)
        end do ! nobs
     end do ! nellip

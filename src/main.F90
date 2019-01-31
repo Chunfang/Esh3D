@@ -1,5 +1,5 @@
-! Copyright (C) 2010-2015 Tabrez Ali 2015-2018 Chunfang Meng. All rights reserved.
-! This file is part of Esh3D. See ../COPYING for license information.
+! Copyright (C) 2010-2015 Tabrez Ali 2015-present Chunfang Meng. All rights 
+! reserved.  This file is part of Esh3D. See ../COPYING for license information.
 
 program main
 
@@ -291,7 +291,8 @@ program main
         Petsc_Null_Integer,incl_bw,Petsc_Null_Integer,Mat_Keig,ierr)
      call MatSetOption(Mat_Keig,Mat_New_Nonzero_Allocation_Err,Petsc_False,    &
         ierr)
-     !call MatCreateDense(Petsc_Comm_World,n_incl*6,n_incl*6,n,n,Petsc_Null_Scalar,Mat_Keig,ierr)
+     !call MatCreateDense(Petsc_Comm_World,n_incl*6,n_incl*6,n,n,               &
+     !   Petsc_Null_Scalar,Mat_Keig,ierr)
      ! From [Keig]
      if (rank==nprcs-1) call MatSetValues(Mat_Keig,n,(/(i,i=0,n-1)/),n,        &
         (/(i,i=0,n-1)/),Keig,Insert_Values,ierr)
@@ -299,7 +300,8 @@ program main
      call MatAssemblyEnd(Mat_Keig,Mat_Final_Assembly,ierr)
      call KSPCreate(Petsc_Comm_World,KryInc,ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
-     call KSPSetOperators(KryInc,Mat_Keig,Mat_Keig,Different_Nonzero_Pattern,ierr)
+     call KSPSetOperators(KryInc,Mat_Keig,Mat_Keig,Different_Nonzero_Pattern,  &
+        ierr)
 #else
      call KSPSetOperators(KryInc,Mat_Keig,Mat_Keig,ierr)
 #endif

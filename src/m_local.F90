@@ -1,5 +1,5 @@
-! Copyright (C) 2010-2015 Tabrez Ali. All rights reserved.
-! This file is part of Defmod. See ../COPYING for license information.
+! Copyright (C) 2010-2015 Tabrez Ali 2015-present Chunfang Meng. All rights 
+! reserved. This file is part of Esh3D. See ../COPYING for license information.
 
 module local
 
@@ -43,34 +43,6 @@ contains
        val=sum(m(i,:)); m(i,:)=f0; m(i,i)=val ! Diagonalize [M]
     end do
   end subroutine FormElM
-
-  ! Form element damping (Abs) matrix [C]
-  subroutine FormElAbsC(enodes,ecoords,eside,matrot,E,nu,rho,c)
-    implicit none
-    real(8) :: ecoords(npel,dmn),E,nu,rho,c(eldof,eldof),Vp,Vs,area,           &
-       matc(dmn,dmn),matrot(dmn,dmn)
-    integer :: enodes(npel),eside,i,j,j1,j2,snodes(nps)
-    c=f0
-    Vs=sqrt(E/(f2*(f1+nu)*rho))
-    Vp=sqrt(((f1-nu)*E)/((f1-f2*nu)*(f1+nu)*rho))
-    call EdgeAreaNodes(enodes,ecoords,eside,area,snodes)
-    do i=1,nps
-       do j=1,npel
-          if (snodes(i)==enodes(j)) then
-             matc=f0
-             j2=dmn*j-dmn
-             ! Viscous matrix in facet coordinate
-             do j1=1,dmn
-                if (j1==dmn) matc(j1,j1)=area*Vp*rho/dble(nps)
-                if (j1/=dmn) matc(j1,j1)=area*Vs*rho/dble(nps)
-             end do
-             ! Viscous matrix in global coordinate
-             matc=matmul(matmul(matrot,matc),transpose(matrot))
-             c(j2+1:j2+dmn,j2+1:j2+dmn)=matc
-          end if
-       end do
-    end do
-  end subroutine FormElAbsC
 
   ! Form element index
   subroutine FormElIndx(enodes,indx)

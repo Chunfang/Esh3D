@@ -1,5 +1,5 @@
-! Copyright (C) 2010-2015 Tabrez Ali 2015-2018 Chunfang Meng. All rights reserved.
-! This file is part of Esh3D. See ../COPYING for license information.
+! Copyright (C) 2010-2015 Tabrez Ali 2015-present Chunfang Meng. All rights 
+! reserved. This file is part of Esh3D. See ../COPYING for license information.
 
 module global
 

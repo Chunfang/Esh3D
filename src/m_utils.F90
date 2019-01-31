@@ -1,3 +1,6 @@
+! Copyright (C) 2010-2015 Tabrez Ali 2015-present Chunfang Meng. All rights 
+! reserved. This file is part of Esh3D. See ../COPYING for license information.
+
 module utils 
   implicit none
   real(8),parameter :: f0=0.0d0,f1=1.0d0,f2=2.0d0,f3=3.0d0,f4=4.0d0,f6=6.0d0,  &
