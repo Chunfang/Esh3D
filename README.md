@@ -66,9 +66,9 @@ The authors appreciate that the users cite the following papers in any publicati
 * * *
 
 ## REFERENCES
-* Meng, C., 2019, “Extneding Esh3D code to solve interactive Eshelby's inhomogeneity problems”, Earth and Space Science, submitted.
-* Meng, C., 2019, “Esh3D. an analytical and numerical hybrid code for full and half space Eshelby's inclusion problems”, Earth and Space Science, https://doi.org/10.1029/2018EA000442.   
 * Meng, C., W. Heltsley, and D. Pollard, 2012, "Evaluation of the Eshelby Solution for the Ellipsoidal Inclusion and Heterogeneity", Computers & Geosciences, Vols. 40, pp. 40 - 48, https://doi.org/10.1016/j.cageo.2011.07.008.  
 * Meng, C., F. Maerten, D. Pollard, 2012. “Modeling mixed-mode fracture propagation in isotropic elastic three dimensional solid”, International Journal of Fracture, Vols. 179, pp. 45– 57, https://doi.org/10.1007/s10704-012-9771-6.  
 * Meng, C., D. Pollard, 2014, “Eshelby’s solution for ellipsoidal inhomogeneous inclusions with applications to compaction bands”, Journal of Structural Geology, Vols. 67, pp. 1 - 19, https://doi.org/10.1016/j.jsg.2014.07.002.  
 * Ali, T., [Defmod](https://bitbucket.org/stali/defmod) - Parallel multiphysics finite element code for modeling crustal deformation during the earthquake/rifting cycle, https://arxiv.org/abs/1402.0429.
+* Meng, C., 2019, “Esh3D. an analytical and numerical hybrid code for full and half space Eshelby's inclusion problems”, Earth and Space Science, https://doi.org/10.1029/2018EA000442.   
+* Meng, C., 2019, “Extneding Esh3D code to solve interactive Eshelby's inhomogeneity problems”, Earth and Space Science, submitted.
