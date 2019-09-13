@@ -1,4 +1,4 @@
-! Copyright (C) 2010-2015 Tabrez Ali 2015-present Chunfang Meng. All rights 
+! Copyright (C) 2010-2015 Tabrez Ali 2015-present Chunfang Meng. All rights
 ! reserved. This file is part of Esh3D. See ../COPYING for license information.
 
 module global
@@ -131,7 +131,7 @@ contains
     vvec=vvec*area/dble(nps)
     do i=1,nps
        vec=vvec
-       do j=1,nd 
+       do j=1,nd
           if (bc(snodes(i),j)==0) vec(j)=f0
        end do
        snode=nl2g(snodes(i),2)
@@ -150,7 +150,7 @@ contains
   ! Signed distance point to plane/line
   subroutine Mix(a,b,c,m)
     implicit none
-    real(8) :: a(3),b(3),c(3),r(3),m 
+    real(8) :: a(3),b(3),c(3),r(3),m
     r(1)=a(2)*b(3)-a(3)*b(2)
     r(2)=a(3)*b(1)-a(1)*b(3)
     r(3)=a(1)*b(2)-a(2)*b(1)
@@ -159,14 +159,14 @@ contains
 
   ! Translation matrix from global to face coordinate
   subroutine Glb2Face(ecoords,side,matrot,idface)
-    implicit none  
+    implicit none
     integer :: side,idface(:)
     real(8) :: ecoords(:,:),matrot(9),vec1(3),vec2(3),vec3(3),vec4(3),cntf(3), &
        cntv(3)
     cntv=(/sum(ecoords(:,1)),sum(ecoords(:,2)),sum(ecoords(:,3))/)/dble(npel)
     select case(eltype)
     case("tet")
-       select case(side) 
+       select case(side)
        case(1)
           vec1=ecoords(2,:)-ecoords(1,:)
           call Cross(vec1,ecoords(4,:)-ecoords(1,:),vec3)
@@ -185,7 +185,7 @@ contains
           idface=(/1,2,3/)
        end select
     case("hex")
-       select case(side) 
+       select case(side)
        case(1)
           vec1=ecoords(2,:)-ecoords(1,:)
           call Cross(vec1,ecoords(5,:)-ecoords(1,:),vec3)
@@ -211,7 +211,7 @@ contains
           call Cross(vec1,ecoords(8,:)-ecoords(5,:),vec3)
           idface=(/5,6,7,8/)
        end select
-    end select    
+    end select
     vec1=vec1/sqrt(sum(vec1*vec1))
     vec3=vec3/sqrt(sum(vec3*vec3))
     cntf=(/sum(ecoords(idface,1)),sum(ecoords(idface,2)),sum(ecoords(idface,3))&
@@ -225,7 +225,7 @@ contains
 
   ! Form RHS to cancel residual traction/displacement surfdat, solfix -> Vec_F
   subroutine MatchSurf
-    implicit none  
+    implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
 #endif
@@ -234,7 +234,7 @@ contains
        estress(nip,6)
     call VecZeroEntries(Vec_F,ierr) ! Incremental numerical RHS
     do i=1,ntrc_loc
-       do j=1,3  
+       do j=1,3
           matstr(j,j)=surfdat(i,12+j)
        end do
        matstr(1,2)=surfdat(i,16); matstr(2,1)=surfdat(i,16)
@@ -243,8 +243,8 @@ contains
        mattmp=reshape(surfmat(i,:),(/3,3/))
        matstr=matmul(matmul(transpose(mattmp),matstr),mattmp)
        vectmp=matstr(:,3)
-       ! Subtract initial traction and change sign 
-       el=surfel(i) 
+       ! Subtract initial traction and change sign
+       el=surfel(i)
        enodes=nodes(el,:)
        ecoords=coords(enodes,:)
        call FormLocalIndx(enodes,indx)
@@ -253,14 +253,14 @@ contains
                 sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)        &
               /dble(nip)
        do j=1,3
-          matstr(j,j)=vecstr(j) 
+          matstr(j,j)=vecstr(j)
        end do
        matstr(1,2)=vecstr(4); matstr(2,1)=vecstr(4)
        matstr(2,3)=vecstr(5); matstr(3,2)=vecstr(5)
        matstr(1,3)=vecstr(6); matstr(3,1)=vecstr(6)
        matstr=matmul(matmul(transpose(mattmp),matstr),mattmp)
        vectmp0=matstr(:,3)
-       vectmp=-(vectmp-vectmp0) 
+       vectmp=-(vectmp-vectmp0)
        ! Rotate to global coordinate
        vectmp=matmul(mattmp,vectmp)
        call ApplyTraction(surfel(i),surfside(i),vectmp)
@@ -268,21 +268,21 @@ contains
     call VecAssemblyBegin(Vec_F,ierr)
     call VecAssemblyEnd(Vec_F,ierr)
     !if (fini) then ! Cancel fixed dofs only for finite domain
-    !   do i=1,nfix 
+    !   do i=1,nfix
     !      do j=1,3
     !         if (bcfix(i,j)==0) then
-    !            vectmp(1)=-(solfix(i,j)-uu0((ndfix(i)-1)*3+j)) 
+    !            vectmp(1)=-(solfix(i,j)-uu0((ndfix(i)-1)*3+j))
     !            j1=(nl2g(ndfix(i),2)-1)*3+j-1
     !            call VecSetValue(Vec_F,j1,vectmp(1),Add_Values,ierr)
     !         end if
     !      end do
-    !   end do     
+    !   end do
     !end if
     if (fini) call FixBndVecF
-  end subroutine MatchSurf 
+  end subroutine MatchSurf
 
   subroutine GetVecFixC
-    implicit none  
+    implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
 #endif
@@ -302,42 +302,42 @@ contains
 
   ! Modify RHS for fixed value boundary condition: Mat_Kfull,solfix->Vec_F
   subroutine FixBndVecF
-    implicit none  
+    implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
 #endif
     integer :: i,j,j1
     real(8) :: val
-    do i=1,nfix 
+    do i=1,nfix
        do j=1,3
           if (bcfix(i,j)==0) then
-             val=solfix(i,j)-uu0((ndfix(i)-1)*3+j) 
+             val=solfix(i,j)-uu0((ndfix(i)-1)*3+j)
              j1=(nl2g(ndfix(i),2)-1)*3+j-1
              call VecSetValue(Vec_Fix,j1,val,Insert_Values,ierr)
              call VecSetValue(Vec_F,j1,-val,Insert_Values,ierr)
           end if
        end do
-    end do 
+    end do
     call VecAssemblyBegin(Vec_Fix,ierr)
     call VecAssemblyEnd(Vec_Fix,ierr)
     call MatMult(Mat_Kfull,Vec_Fix,Vec_FixF,ierr)
     call VecAssemblyBegin(Vec_F,ierr)
     call VecAssemblyEnd(Vec_F,ierr)
     call VecPointWiseMult(Vec_F,Vec_F,Vec_FixC,ierr)
-    do i=1,nfix 
+    do i=1,nfix
        do j=1,3
           if (bcfix(i,j)==0) then
              j1=(nl2g(ndfix(i),2)-1)*3+j-1
              call VecSetValue(Vec_FixF,j1,f0,Insert_Values,ierr)
           end if
        end do
-    end do 
+    end do
     call VecAssemblyBegin(Vec_FixF,ierr)
     call VecAssemblyEnd(Vec_FixF,ierr)
-    call VecAXPY(Vec_F,f1,Vec_FixF,ierr) 
+    call VecAXPY(Vec_F,f1,Vec_FixF,ierr)
   end subroutine FixBndVecF
 
-  ! Observation/inclusion nodal base 
+  ! Observation/inclusion nodal base
   subroutine GetObsNd(strng)
     implicit none
     character(2) :: strng
@@ -349,15 +349,15 @@ contains
        vec15(dmn),vec73(dmn),vec76(dmn),vec78(dmn),vec7o(dmn)
     real(8),allocatable :: N_full(:,:)
     logical :: p_in_dom, p_in_el
-    c=0.125d0 
+    c=0.125d0
 
-    ! Type of the evaluation obs or inclusion 
+    ! Type of the evaluation obs or inclusion
     if (strng=="ob") neval=nobs
     if (strng=="in") neval=nellip
     allocate(pick(neval))
     pick=0
 
-    select case(eltype) 
+    select case(eltype)
     case("tet"); allocate(nd_full(neval,4),N_full(neval,4))
     case("hex"); allocate(nd_full(neval,8),N_full(neval,8))
     allocate(oel_full(neval))
@@ -369,7 +369,7 @@ contains
        if (strng=="ob") then
           xob=ocoord(ob,:)
        elseif (strng=="in") then
-          xob=ellip(ob,1:3) 
+          xob=ellip(ob,1:3)
        end if
        p_in_dom=(xob(1)>=xmind .and. xob(1)<=xmaxd .and. xob(2)>=ymind .and.   &
           xob(2)<=ymaxd)
@@ -399,7 +399,7 @@ contains
                    call Mix(vec14,vec12,vec1o,df)
                    call Mix(vec24,vec23,vec2o,d)
                    ! Point in tet
-                   if (dd>=f0 .and. dl>=f0 .and. df>=f0 .and. d>=f0) then 
+                   if (dd>=f0 .and. dl>=f0 .and. df>=f0 .and. d>=f0) then
                       call Mix(vec12,vec13,vec14,du)
                       call Mix(vec13,vec14,vec12,dr)
                       call Mix(vec14,vec12,vec13,db)
@@ -453,7 +453,7 @@ contains
     if (strng=="ob") then
        nobs_loc=size(pack(pick,pick/=0))
        allocate(ol2g(nobs_loc),ocoord_loc(nobs_loc,dmn),oel(nobs_loc))
-       select case(eltype) 
+       select case(eltype)
        case("tet"); allocate(onlst(nobs_loc,4),oshape(nobs_loc,4))
        case("hex"); allocate(onlst(nobs_loc,8),oshape(nobs_loc,8))
        end select
@@ -467,7 +467,7 @@ contains
        allocate(el2g(nellip_loc),eel(nellip_loc))
        el2g=pack(pick,pick/=0)
        eel=oel_full(el2g)
-    end if   
+    end if
   end subroutine GetObsNd
 
   ! Form local index
@@ -484,7 +484,7 @@ contains
     real(8) :: edisp(npel,3),estress(nip,6),matstr0(3,3),matstr(3,3),          &
        mattmp(3,3),vecstr(6)
     do i=1,ntrc_loc
-       el=surfel(i) 
+       el=surfel(i)
        enodes=nodes(el,:)
        ecoords=coords(enodes,:)
        call FormLocalIndx(enodes,indx)
@@ -497,7 +497,7 @@ contains
               /dble(nip)
        surfdat(i,13:18)=vecstr
        do j=1,3
-          matstr(j,j)=vecstr(j) 
+          matstr(j,j)=vecstr(j)
        end do
        matstr(1,2)=vecstr(4); matstr(2,1)=vecstr(4)
        matstr(2,3)=vecstr(5); matstr(3,2)=vecstr(5)
@@ -510,16 +510,16 @@ contains
                 sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)        &
               /dble(nip)
        do j=1,3
-          matstr0(j,j)=vecstr(j) 
+          matstr0(j,j)=vecstr(j)
        end do
        matstr0(1,2)=vecstr(4); matstr0(2,1)=vecstr(4)
        matstr0(2,3)=vecstr(5); matstr0(3,2)=vecstr(5)
        matstr0(1,3)=vecstr(6); matstr0(3,1)=vecstr(6)
        matstr=matstr-matmul(matmul(transpose(mattmp),matstr0),mattmp)
-       resid(i)=sqrt(sum(matstr(:,3)*matstr(:,3)))      
+       resid(i)=sqrt(sum(matstr(:,3)*matstr(:,3)))
        select case(eltype)
        case("tet")
-          select case(surfside(i)) 
+          select case(surfside(i))
           case(1)
              idface=(/1,2,4/)
           case(2)
@@ -530,7 +530,7 @@ contains
              idface=(/1,2,3/)
           end select
        case("hex")
-          select case(surfside(i)) 
+          select case(surfside(i))
           case(1)
              idface=(/1,2,5,6/)
           case(2)
@@ -556,12 +556,12 @@ contains
     implicit none
     integer :: i,j
     do i=1,nfix
-       solfix(i,:3)=solfix(i,:3)+uu((/((ndfix(i)-1)*3+j,j=1,3)/)) 
+       solfix(i,:3)=solfix(i,:3)+uu((/((ndfix(i)-1)*3+j,j=1,3)/))
     end do
   end subroutine FixSup
 
   ! Superpose observation disp/stress
-  subroutine ObsSup 
+  subroutine ObsSup
     implicit none
     integer :: ob,i,j,ind(npel),row(eldof)
     real(8) :: vectmp(3,1),strtmp(6),mattmp(3,npel),vecshp(npel,1),            &
@@ -574,18 +574,18 @@ contains
           end do
           mattmp=reshape(uu(row),(/3,npel/))
           vecshp=reshape(oshape(ob,:),(/npel,1/))
-          vectmp=matmul(mattmp,vecshp) 
+          vectmp=matmul(mattmp,vecshp)
           odat(ob,10:12)=odat(ob,10:12)+vectmp(:,1) ! Superpose
-          enodes=nodes(oel(ob),:) 
+          enodes=nodes(oel(ob),:)
           ecoords=coords(enodes,:)
           call CalcElStress(ecoords,uu(row),mat(1),mat(2),estress(:,:))
           strtmp=(/sum(estress(:,1)),sum(estress(:,2)),sum(estress(:,3)),      &
                    sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)     &
                    /dble(nip)
           odat(ob,13:18)=odat(ob,13:18)+strtmp
-       end do 
+       end do
     end if
-  end subroutine ObsSup 
+  end subroutine ObsSup
 
   ! Update interactive eiginstrain Vec_Eig -> ellipeff(12:17)
   subroutine UpInhoEigen(eigen)
@@ -623,12 +623,12 @@ contains
     call DGETRI(j,matinv,j,ipiv,work,j,info)
     vectmp=matmul(matinv,Feig)
     do i=1,nellip
-       eigen(i,:)=vectmp((/((i-1)*6+j,j=1,6)/)) 
+       eigen(i,:)=vectmp((/((i-1)*6+j,j=1,6)/))
     end do
 
     !print('(30(ES11.2E3,X))'), matmul(Keig,vectmp)
   end subroutine UpInhoEigen
-  
+
   ! Evaluate inclusions stress changes uu (solok) -> instress(nellip,6)
   subroutine InStrEval(ok)
     implicit none
@@ -648,8 +648,8 @@ contains
                 sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)        &
                 /dble(nip)
        instress(el2g(ii),:)=strtmp
-    end do 
-    if (present(ok)) then 
+    end do
+    if (present(ok)) then
        okval=ok
     else
        okval=.false.
@@ -671,7 +671,7 @@ contains
 
   ! Save Esh3D solution to H5 file
   subroutine EshSave
-    implicit none  
+    implicit none
     integer(hid_t) :: idfile,iddat,spc_dat
     integer(hsize_t) :: dim_dat(2)
     integer :: err

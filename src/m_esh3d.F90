@@ -1,31 +1,31 @@
-! Copyright (C) 2011-present Chunfang Meng. All rights reserved. This file is 
+! Copyright (C) 2011-present Chunfang Meng. All rights reserved. This file is
 ! part of Esh3D. See ../COPYING for license information.
 
 module esh3d
 
-  use utils  
+  use utils
   implicit none
 
-contains 
+contains
 
   ! Eshelby's tensor S(6,6)
-  subroutine EshS2(vm,a,S2,PIvec)  
-    implicit none  
+  subroutine EshS2(vm,a,S2,PIvec)
+    implicit none
     real(8) :: vm,a(3),Ifir(3),Isec(3,3),rate,theta,m,B,D,F,E,denom,           &
        S4(3,3,3,3),S2(6,6),PIvec(3)
     rate=a(1)/a(3)
     ! Check geometry category, assuming a(1)>a(2)>a(3)
-    if (a(1)-a(2)<1.d-6*a(1) .and. a(2)-a(3)<1.d-6*a(1)) then ! Spherical case 
+    if (a(1)-a(2)<1.d-6*a(1) .and. a(2)-a(3)<1.d-6*a(1)) then ! Spherical case
        Ifir=(f4/f3)*pi
        Isec=0.8*pi*a(1)**2
-    elseif (a(1)-a(2)>1.d-6*a(1) .and. a(2)-a(3)<1.d-6*a(1)) then ! Prolate case 
+    elseif (a(1)-a(2)>1.d-6*a(1) .and. a(2)-a(3)<1.d-6*a(1)) then ! Prolate case
        Ifir(2)=f2*pi*a(1)*a(3)**2/((a(1)**2-a(3)**2)**1.5)                     &
           *(rate*sqrt(rate**2-f1)-acosh(rate))
-       Ifir(3)=Ifir(2) 
-       Ifir(1)=f4*pi-f2*Ifir(2) 
+       Ifir(3)=Ifir(2)
+       Ifir(1)=f4*pi-f2*Ifir(2)
        Isec=f0
        Isec(1,2)=(Ifir(2)-Ifir(1))/(a(1)**2-a(2)**2)
-       Isec(1,3)=Isec(1,2) 
+       Isec(1,3)=Isec(1,2)
        Isec(2,1)=Isec(1,2)
        Isec(3,1)=Isec(1,3)
        Isec(1,1)=(f4*pi/a(1)**2-f2*Isec(1,2))/f3
@@ -88,8 +88,8 @@ contains
     S4(3,1,3,1)=((a(3)**2+a(1)**2)*Isec(3,1)+(f1-f2*vm)*(Ifir(3)+Ifir(1)))   &
        /(f2*denom)
     S4(1,3,1,3)=S4(3,1,3,1)
-    ! Original stress order 
-    !S2(1,:)=(/S4(1,1,1,1),f0,f0,S4(1,1,2,2),f0,S4(1,1,3,3)/) 
+    ! Original stress order
+    !S2(1,:)=(/S4(1,1,1,1),f0,f0,S4(1,1,2,2),f0,S4(1,1,3,3)/)
     !S2(2,:)=(/f0,f2*S4(1,2,1,2),f0,f0,f0,f0/)
     !S2(3,:)=(/f0,f0,f2*S4(1,3,1,3),f0,f0,f0/)
     !S2(4,:)=(/S4(2,2,1,1),f0,f0,S4(2,2,2,2),f0,S4(2,2,3,3)/)
@@ -105,8 +105,8 @@ contains
     PIvec(2)=-f2*(Ifir(1)-Ifir(3))/(f8*pi)
     PIvec(3)=-f2*(Ifir(2)-Ifir(1))/(f8*pi)
     PIvec(1)=-f2*(Ifir(3)-Ifir(2))/(f8*pi)
-  end subroutine EshS2    
-  
+  end subroutine EshS2
+
   ! Eshelby's tensor D(3,3,3,3)
   subroutine EshD4(vm,a,x,D4,fderphi,tderpsi)
     implicit none
@@ -126,26 +126,26 @@ contains
                Fvec(3),fderc2(3),fderc2_21(3,3),fderc2_22(3,3)
     coef=f0
     coef(3,3)=f1 ! coefficient of lambds**3 term
-    coef(3,2)=a(1)**2+a(2)**2+a(3)**2-(x(1)**2+x(2)**2+x(3)**2) 
+    coef(3,2)=a(1)**2+a(2)**2+a(3)**2-(x(1)**2+x(2)**2+x(3)**2)
     coef(3,1)=a(1)**2*a(2)**2+a(1)**2*a(3)**2+a(2)**2*a(3)**2-((a(2)**2+       &
               a(3)**2)*x(1)**2+(a(1)**2+a(3)**2)*x(2)**2+(a(1)**2+a(2)**2)     &
-              *x(3)**2) 
+              *x(3)**2)
     coef(3,0)=a(1)**2*a(2)**2*a(3)**2-(a(2)**2*a(3)**2*x(1)**2+a(1)**2*a(3)**2*&
-              x(2)**2+a(1)**2*a(2)**2*x(3)**2) 
+              x(2)**2+a(1)**2*a(2)**2*x(3)**2)
     call Root_4(3,coef,root,root_im2,root_im3)
     lambda=f0
     if (x(1)**2/a(1)**2+x(2)**2/a(2)**2+x(3)**2/a(3)**2>f1) then
-       if (root_im2==f0 .and. root_im3==f0) then 
+       if (root_im2==f0 .and. root_im3==f0) then
           lambda=max(f0,maxval(root))
-       else 
+       else
           lambda=max(f0,root(3))
-       end if 
+       end if
     end if
     theta=asin(sqrt((a(1)**2-a(3)**2)/(a(1)**2+lambda))) ! the amplitude
     m=(a(1)**2-a(2)**2)/(a(1)**2-a(3)**2) ! m=k**2 is the parameter
     call elbd(theta,0.5*pi-theta,f1-m,B,D)
     F=B+D; E=B+(f1-m)*D
-    ! Calculation of Is 
+    ! Calculation of Is
     if (a(1)==a(2) .and. a(1)==a(3)) then
        Ifir=(f4/f3)*pi*a(1)**3/(a(1)**2+lambda)**1.5
        Isec=0.8*pi*a(1)**3/sqrt(a(1)**2+lambda)
@@ -207,21 +207,21 @@ contains
     end if
 
     ! I derivatives
-    call buildtensors(a,a_21,a_22) 
+    call buildtensors(a,a_21,a_22)
     ultadelfir=-f2*pi*product(a)/((a**2+lambda)*del)
-    call buildtensors(ultadelfir,ultadelfir_21,ultadelfir_22) 
+    call buildtensors(ultadelfir,ultadelfir_21,ultadelfir_22)
     ultadelsec=-f2*pi*product(a)/((a_21**2+lambda)*(a_22**2+lambda)*del)
-    ! derivatives of lambda 
+    ! derivatives of lambda
     c1=sum((x**2)/((a**2+lambda)**2))
     c2=sum((x**2)/((a**2+lambda)**3))
     c3=sum((x**2)/((a**2+lambda)**4))
     Fvec=f2*x/(a**2+lambda)
     call buildtensors(Fvec,F_21,F_22)
-    if (lambda==f0) then 
-       fderlambda=f0 
+    if (lambda==f0) then
+       fderlambda=f0
     else
        fderlambda=Fvec/c1
-    end if 
+    end if
     call buildtensors(fderlambda,fderlambda_21,fderlambda_22)
     diagvals=f0;nondiagvals=f0
     do i=1,3
@@ -236,109 +236,109 @@ contains
     fderF=nondiagvals*(f1/(a_21**2+lambda))*(-F_21*fderlambda_22)+diagvals*    &
           (f1/(a_21**2+lambda))*(f2-F_21*fderlambda_22)
     fderc1=Fvec/(a**2+lambda)-f2*c2*fderlambda
-    call buildtensors(fderc1,fderc1_21,fderc1_22) 
+    call buildtensors(fderc1,fderc1_21,fderc1_22)
     fderc2=Fvec/(a**2+lambda)**2-f3*c3*fderlambda
-    call buildtensors(fderc2,fderc2_21,fderc2_22) 
-    if (lambda==f0) then 
-       sderlambda=f0 
+    call buildtensors(fderc2,fderc2_21,fderc2_22)
+    if (lambda==f0) then
+       sderlambda=f0
     else
        sderlambda=(fderF-fderlambda_21*fderc1_22)/c1
-    end if 
+    end if
     sderc1=(f1/(a_21**2+lambda))*(fderF-fderlambda_22*F_21/(a_21**2+lambda))-  &
        f2*(fderc2_22*fderlambda_21+c2*sderlambda)
     fderIfir=ultadelfir_21*fderlambda_22
-    do q=1,3 
-       do p=1,3 
-          do r=1,3 
+    do q=1,3
+       do p=1,3
+          do r=1,3
              sderF(q,p,r)=-(fderF(q,p)*fderlambda(r)+fderF(q,r)*fderlambda(p)+ &
                           Fvec(q)*sderlambda(p,r))/(a(q)**2+lambda)
-          end do 
-       end do 
+          end do
+       end do
     end do
     zeefir=f1/(a**2+lambda)+0.5*sum(f1/(a**2+lambda))
     zeesec=f1/(a_21**2+lambda)+f1/(a_22**2+lambda)+0.5*sum(f1/(a**2+lambda))
-    do i=1,3 
-       do j=1,3 
-          do k=1,3 
+    do i=1,3
+       do j=1,3
+          do k=1,3
              sderIfir(i,j,k)=ultadelfir(i)*(sderlambda(j,k)-fderlambda(j)*     &
                              fderlambda(k)*zeefir(i))
-          end do 
-       end do 
-    end do 
-    do i=1,3 
-       do j=1,3 
-          do k=1,3 
+          end do
+       end do
+    end do
+    do i=1,3
+       do j=1,3
+          do k=1,3
              fderIsec(i,j,k)=ultadelsec(i,j)*fderlambda(k)
-          end do 
-       end do 
-    end do 
-    do i=1,3 
-       do j=1,3 
-          do k=1,3 
-             do l=1,3 
+          end do
+       end do
+    end do
+    do i=1,3
+       do j=1,3
+          do k=1,3
+             do l=1,3
                 sderIsec(i,j,k,l)=ultadelsec(i,j)*(sderlambda(k,l)-            &
                                   fderlambda(k)*fderlambda(l)*zeesec(i,j))
-             end do 
-          end do 
-       end do 
-    end do 
-    do q=1,3 
-       do p=1,3 
-          do r=1,3 
-             if (lambda==f0) then 
+             end do
+          end do
+       end do
+    end do
+    do q=1,3
+       do p=1,3
+          do r=1,3
+             if (lambda==f0) then
                 tderlambda(q,p,r)=f0
              else
                 tderlambda(q,p,r)=(-f1/c1)*(sderlambda(q,p)*fderc1(r)-         &
                                   sderF(q,p,r)+sderlambda(q,r)*fderc1(p)+      &
                                   fderlambda(q)*sderc1(p,r))
-             end if 
-          end do 
-       end do 
-    end do 
-    
-    !Calculation of V-potentials 
-    do i=1,3 
-       do p=1,3 
-          do q=1,3 
-             call kdelta(p,q,delta1) 
+             end if
+          end do
+       end do
+    end do
+
+    !Calculation of V-potentials
+    do i=1,3
+       do p=1,3
+          do q=1,3
+             call kdelta(p,q,delta1)
              sderVfir(i,p,q)=-(delta1*Isec(p,i)+x(p)*fderIsec(p,i,q))
-          end do 
-       end do 
-    end do 
-    do i=1,3 
-       do p=1,3 
-          do q=1,3 
-             do r=1,3 
+          end do
+       end do
+    end do
+    do i=1,3
+       do p=1,3
+          do q=1,3
+             do r=1,3
                 call kdelta(p,q,delta1); call kdelta(p,r,delta2)
                 tderVfir(i,p,q,r)=-(delta1*fderIsec(p,i,r)+delta2*             &
                                   fderIsec(p,i,q)+x(p)*sderIsec(p,i,q,r))
-             end do 
-          end do 
-       end do 
-    end do 
+             end do
+          end do
+       end do
+    end do
 
-    !calculation of phi derivatives 
-    do p=1,3 
-       do q=1,3 
-          call kdelta(p,q,delta1) 
+    !calculation of phi derivatives
+    do p=1,3
+       do q=1,3
+          call kdelta(p,q,delta1)
           sderphi(p,q)=-(delta1*Ifir(p)+x(p)*fderIfir(p,q))
-       end do 
-    end do 
-    do p=1,3 
-       do q=1,3 
-          do r=1,3 
+       end do
+    end do
+    do p=1,3
+       do q=1,3
+          do r=1,3
              call kdelta(p,q,delta1); call kdelta(p,r,delta2)
              tderphi(p,q,r)=-(delta1*fderIfir(p,r)+delta2*fderIfir(p,q)+x(p)*  &
                             sderIfir(p,q,r))
-          end do 
-       end do 
-    end do 
+          end do
+       end do
+    end do
 
-    !psi's 
-    do i=1,3 
-       do j=1,3 
-          do k=1,3 
-             do l=1,3 
+    !psi's
+    do i=1,3
+       do j=1,3
+          do k=1,3
+             do l=1,3
                 call kdelta(i,j,delta1); call kdelta(i,k,delta2)
                 call kdelta(i,l,delta3)
                 foderpsi(i,j,k,l)=delta1*(sderphi(k,l)-a(i)**2*                &
@@ -347,17 +347,17 @@ contains
                                   (sderphi(j,k)-a(i)**2*sderVfir(i,j,k))+      &
                                   x(i)*(tderphi(j,k,l)-a(i)**2*                &
                                   tderVfir(i,j,k,l))
-             end do 
-          end do 
-       end do 
-    end do 
+             end do
+          end do
+       end do
+    end do
 
-    !calculation of D4 
+    !calculation of D4
     premult1=f1/(f8*pi*(f1-vm))
-    do i=1,3 
-       do j=1,3 
-          do k=1,3 
-             do l=1,3 
+    do i=1,3
+       do j=1,3
+          do k=1,3
+             do l=1,3
                 call kdelta(k,l,delta1); call kdelta(i,l,delta2)
                 call kdelta(j,l,delta3); call kdelta(i,k,delta4)
                 call kdelta(j,k,delta5)
@@ -365,28 +365,28 @@ contains
                             sderphi(i,j)-(f1-vm)*(sderphi(k,j)*delta2+         &
                             sderphi(k,i)*delta3+sderphi(l,j)*delta4+           &
                             sderphi(l,i)*delta5))
-             end do 
-          end do 
-       end do 
+             end do
+          end do
+       end do
     end do
 
     ! fderphi tderpsi
     fderphi=-x*Ifir
     do i=1,3
        do j=1,3
-          do l=1,3  
+          do l=1,3
              call kdelta(i,j,delta1); call kdelta(i,l,delta2)
              call kdelta(j,l,delta3)
-             tderpsi(i,j,l)=-delta1*x(l)*(Ifir(l)-a(i)**2*Isec(i,l))-          &  
+             tderpsi(i,j,l)=-delta1*x(l)*(Ifir(l)-a(i)**2*Isec(i,l))-          &
                             x(i)*x(j)*(fderIfir(j,l)-a(i)**2*fderIsec(i,j,l))- &
                             (delta2*x(j)+delta3*x(i))*(Ifir(j)-                &
                             a(i)**2*Isec(i,j))
           end do
        end do
     end do
-  end subroutine EshD4   
+  end subroutine EshD4
 
-  ! Eshelby's global coefficient matrix Keig(6*nellip,6*nellip) 
+  ! Eshelby's global coefficient matrix Keig(6*nellip,6*nellip)
   subroutine EshKeig(Em,vm,ellip,Keig)
     implicit none
     integer :: i,j,k,l,nellip
@@ -407,7 +407,7 @@ contains
                 tmp=a(k)
                 a(k)=a(l)
                 a(l)=tmp
-             end if 
+             end if
           end do
        end do
        ! Initial rotation matrices due to axis exchange
@@ -417,8 +417,8 @@ contains
        ! Rotation matrices w.r.t the ellipsoid
        ang=ellip(i,7:9)
        call Ang2Mat(ang,R,f1)
-       call Ang2Mat(ang,Rb,-f1) 
-       R2=matmul(R_init,Rb)  ! Global=>ellipsoid 
+       call Ang2Mat(ang,Rb,-f1)
+       R2=matmul(R_init,Rb)  ! Global=>ellipsoid
        R2b=matmul(R,Rb_init) ! Ellipsoid=>global
        call EshS2(vm,a,S2,PIvec)
        call T2Rot(S2,R2b,S2g) ! Rotate to global
@@ -426,7 +426,7 @@ contains
        k=(i-1)*6+1
        Keig(k:k+5,k:k+5)=Cm-matmul((Cm-Ch),S2g)
        do j=1,nellip
-          if (j/=i) then  
+          if (j/=i) then
              a=ellip(j,4:6)
              ! Stage a1>=a2>=a3
              exh=f0
@@ -437,7 +437,7 @@ contains
                       tmp=a(k)
                       a(k)=a(l)
                       a(l)=tmp
-                   end if 
+                   end if
                 end do
              end do
              ! Initial rotation matrices due to axis exchange
@@ -447,15 +447,15 @@ contains
              ! Rotation matrices w.r.t the ellipsoid
              ang=ellip(j,7:9)
              call Ang2Mat(ang,R,f1)
-             call Ang2Mat(ang,Rb,-f1) 
-             R2=matmul(R_init,Rb)  ! Global=>ellipsoid 
+             call Ang2Mat(ang,Rb,-f1)
+             R2=matmul(R_init,Rb)  ! Global=>ellipsoid
              R2b=matmul(R,Rb_init) ! Ellipsoid=>global
              xobs=ellip(i,:3)-ellip(j,:3) ! i-th centroid at j-th coordinate
-             xobs=matmul(R2,xobs) 
+             xobs=matmul(R2,xobs)
              if (xobs(1)**2/a(1)**2+xobs(2)**2/a(2)**2+xobs(3)**2/a(3)**2<=f1) &
                 then
                 call EshS2(vm,a,D2,PIvec)
-             else  
+             else
                 call EshD4(vm,a,xobs,D4,fderphi,tderpsi)
                 call T4T2(D4,D2)
              end if
@@ -469,29 +469,29 @@ contains
   end subroutine EshKeig
 
   subroutine EshFeig(Em,vm,instress,ellip,Feig,init)
-    implicit none  
+    implicit none
     integer :: i,j,nellip
-    logical,optional :: init 
+    logical,optional :: init
     logical:: initval
     real(8) :: instress(:,:),ellip(:,:),Em,vm,Cm(6,6),Ch(6,6),strain(6),Feig(:)
-    if (present(init)) then 
+    if (present(init)) then
        initval=init
     else
-       initval=.false. 
+       initval=.false.
     end if
     call CMat(Em,vm,Cm)
     nellip=size(ellip,1); Feig=f0
     do i=1,nellip
        call SolveSix(Cm,instress(i,:),strain)
        call CMat(ellip(i,10),ellip(i,11),Ch)
-       j=(i-1)*6+1 
+       j=(i-1)*6+1
        Feig(j:j+5)=matmul((Cm-Ch),strain)
        if (initval) Feig(j:j+5)=Feig(j:j+5)+matmul(Ch,ellip(i,12:17))
     end do
   end subroutine EshFeig
 
   subroutine EshDisp(vm,eigen,fderphi,tderpsi,u)
-    implicit none 
+    implicit none
     integer :: i,j,k
     real(8) :: vm,u(3),eigen(6),fderphi(3),tderpsi(3,3,3),MatEigen(3,3),       &
         ut(3,1),SumDiag,fderphit(3,1),premult
@@ -510,7 +510,7 @@ contains
     ut=premult*(ut-f2*vm*SumDiag*fderphit-f4*(f1-vm)*matmul(MatEigen,fderphit))
     u=ut(:,1)
   end subroutine EshDisp
-  
+
   ! Translate eigenstrain from inclusion coordinate to global coordinate
   subroutine EigIncl2Glb(ellip)
     implicit none
@@ -524,17 +524,17 @@ contains
        Teigen=matmul(matmul(R,Teigen),transpose(R))
        ellip(i,12:17)=(/Teigen(1,1),Teigen(2,2),Teigen(3,3),Teigen(1,2),       &
           Teigen(2,3),Teigen(1,3)/)
-    end do   
-  end subroutine EigIncl2Glb  
+    end do
+  end subroutine EigIncl2Glb
 
   subroutine EshIncSol(Em,vm,ellip,ocoord,sol)
     implicit none
     integer :: i,j,k,l,m,n,nobs,nellip
     real(8) :: Em,vm,ocoord(:,:),ellip(:,:),sol(:,:) !,Eh,vh
     ! ellip(nellip,17): 1-3 ellipsoid centroid coordinate, 4-6 semi-axises, 7-9
-    ! rotation angles around x,y and z axises, 10,11 inclusion Young's modulus 
-    ! and Poisson's ratio, 12-17 eigen strain 
-    ! sol(nobs,9): 1-3 displacement, 4-9 stress 
+    ! rotation angles around x,y and z axises, 10,11 inclusion Young's modulus
+    ! and Poisson's ratio, 12-17 eigen strain
+    ! sol(nobs,9): 1-3 displacement, 4-9 stress
     real(8) :: ang(3),a(3),tmp,exh(3,3),R_init(3,3),Rb_init(3,3),R(3,3),       &
        Rb(3,3),PIvec(3),Tstress(3,3),Cm(6,6),stresst(6,1),eigent(6,1),         &
        vert(3,1),D4(3,3,3,3),fderphi(3),tderpsi(3,3,3),disp(3),dispt(3,1),     &
@@ -553,7 +553,7 @@ contains
                 tmp=a(k)
                 a(k)=a(l)
                 a(l)=tmp
-             end if 
+             end if
           end do
        end do
        ! Initial rotation matrices due to axis exchange
@@ -563,19 +563,19 @@ contains
        ! Rotation matrices w.r.t the ellipsoid
        ang=ellip(i,7:9)
        call Ang2Mat(ang,R,f1)
-       call Ang2Mat(ang,Rb,-f1) 
+       call Ang2Mat(ang,Rb,-f1)
        ! Eshelby's tensor
-       call EshS2(vm,a,S2,PIvec) 
+       call EshS2(vm,a,S2,PIvec)
        ! Rotate stress and initial eigenstrain against oblique ellipsoid
-       call Vec2Mat(ellip(i,12:17),Teigen)    
+       call Vec2Mat(ellip(i,12:17),Teigen)
        Teigen=matmul(matmul(matmul(R_init,Rb),Teigen),                         &
               transpose(matmul(R_init,Rb)))
        eigent(:,1)=(/Teigen(1,1),Teigen(2,2),Teigen(3,3),Teigen(1,2),          &
-                   Teigen(2,3),Teigen(1,3)/) 
+                   Teigen(2,3),Teigen(1,3)/)
        do j=1,nobs
           vert(:,1)=ocoord(j,:)-ellip(i,:3) ! Relative coordinate
           vert=matmul(matmul(R_init,Rb),vert)
-          call EshD4(vm,a,vert(:,1),D4,fderphi,tderpsi) 
+          call EshD4(vm,a,vert(:,1),D4,fderphi,tderpsi)
           call EshDisp(vm,eigent(:,1),fderphi,tderpsi,disp)
           dispt(:,1)=disp
           ! Rotate back
@@ -583,16 +583,16 @@ contains
           ! Record displacement
           sol(j,:3)=sol(j,:3)+dispt(:,1)
           if (vert(1,1)**2/a(1)**2+vert(2,1)**2/a(2)**2+vert(3,1)**2/a(3)**2   &
-             <=1) then ! J-th obs interior to i-th inclusion 
+             <=1) then ! J-th obs interior to i-th inclusion
              ! Elastic stress
              stresst=matmul(Cm,(matmul(S2,eigent)-eigent))
           else ! J-th obs exterior to i-th inclusion
-             Ttmp=f0 
-             do k=1,3  
-                do l=1,3 
-                   do m=1,3 
-                      do n=1,3 
-                         Ttmp(k,l)=Ttmp(k,l)+D4(k,l,m,n)*Teigen(m,n) 
+             Ttmp=f0
+             do k=1,3
+                do l=1,3
+                   do m=1,3
+                      do n=1,3
+                         Ttmp(k,l)=Ttmp(k,l)+D4(k,l,m,n)*Teigen(m,n)
                       end do
                    end do
                 end do
@@ -606,7 +606,7 @@ contains
           call Vec2Mat(stresst(:,1),Tstress)
           Tstress=matmul(matmul(matmul(R,Rb_init),Tstress),                    &
                   transpose(matmul(R,Rb_init)))
-          ! Record stress         
+          ! Record stress
           sol(j,4:9)=sol(j,4:9)+(/Tstress(1,1),Tstress(2,2),Tstress(3,3),      &
                      Tstress(1,2),Tstress(2,3),Tstress(1,3)/)
        end do ! nobs
@@ -627,13 +627,13 @@ contains
               T4(1,2,2,3)+T4(1,2,3,2),T4(1,2,1,3)+T4(1,2,3,1)/)
     T2(5,:)=(/T4(2,3,1,1),T4(2,3,2,2),T4(2,3,3,3),T4(2,3,1,2)+T4(2,3,2,1),     &
               T4(2,3,2,3)+T4(2,3,3,2),T4(2,3,1,3)+T4(2,3,3,1)/)
-    T2(6,:)=(/T4(1,3,1,1),T4(1,3,2,2),T4(1,3,3,3),T4(1,3,1,2)+T4(1,3,2,1),     & 
-              T4(1,3,2,3)+T4(1,3,3,2),T4(1,3,1,3)+T4(1,3,3,1)/)   
+    T2(6,:)=(/T4(1,3,1,1),T4(1,3,2,2),T4(1,3,3,3),T4(1,3,1,2)+T4(1,3,2,1),     &
+              T4(1,3,2,3)+T4(1,3,3,2),T4(1,3,1,3)+T4(1,3,3,1)/)
   end subroutine T4T2
 
-  ! Rotate T2(6,6) tensor by R(3,3), FE order  
+  ! Rotate T2(6,6) tensor by R(3,3), FE order
   subroutine T2Rot(T2,R,T2R)
-    implicit none  
+    implicit none
     real(8) :: T2(6,6),T2R(6,6),R(3,3),matR(6,6),matRIv(6,6)
     matR(:,1)=(/R(1,1)**2,R(1,2)**2,R(1,3)**2,f2*R(1,1)*R(1,2),                &
                 f2*R(1,2)*R(1,3),f2*R(1,1)*R(1,3)/)
@@ -654,15 +654,15 @@ contains
     T2R=matmul(matmul(matRIv,T2),matR)
   end subroutine T2Rot
 
-  subroutine OkSol(E,v,rects,ocoord,crest,sol) 
+  subroutine OkSol(E,v,rects,ocoord,crest,sol)
     ! Okada wrapper for multiple rectangle faults
     ! E, nu: elastic moduli;
-    ! recst: (nrect,9) 1~3 fault center (x,y,z); 4,5 fault length in strike    
+    ! recst: (nrect,9) 1~3 fault center (x,y,z); 4,5 fault length in strike
     ! and dip; 6 dip angle (rad); 7~9 strike (left lateral+) dip
     ! (up+) and tensile (open) dislocations;
     ! ocoord: (nobs_loc,3) observation locations;
     ! crest: topography height;
-    ! sol: (nobs_loc,9) ux ... yz, sigma_xx .. sigma_xz 
+    ! sol: (nobs_loc,9) ux ... yz, sigma_xx .. sigma_xz
     implicit none
     integer :: nobs,nrect,i,j,iret
     real(8) :: E,v,nu,lbd,alpha,rects(:,:),ocoord(:,:),crest,sol(:,:),x,y,z,   &
@@ -676,24 +676,24 @@ contains
     ang=(/f0,f0,pi/f2/)
     call Ang2Mat(ang,R,f1)
     do i=1,nrect
-       do j=1,nobs 
-          x=ocoord(j,1)-rects(i,1) 
+       do j=1,nobs
+          x=ocoord(j,1)-rects(i,1)
           y=ocoord(j,2)-rects(i,2)
-          z=ocoord(j,3)-crest         ! Adjust height against crest 
+          z=ocoord(j,3)-crest         ! Adjust height against crest
           deep=-(rects(i,3)-crest)    ! deep positive
           ! Translate to Okada coordinate
-          vectmp(:,1)=(/x,y,z/) 
-          vectmp=matmul(R,vectmp) 
+          vectmp(:,1)=(/x,y,z/)
+          vectmp=matmul(R,vectmp)
           x=vectmp(1,1); y=vectmp(2,1); z=vectmp(3,1)
           call dc3d(alpha,x,y,z,deep,rects(i,6)*1.8D2/pi,rects(i,4)/f2,        &
              rects(i,4)/f2,rects(i,5)/f2,rects(i,5)/f2,rects(i,7),rects(i,8),  &
              rects(i,9),ux,uy,uz,exx,eyx,ezx,exy,eyy,ezy,exz,eyz,ezz,iret)
           ! Translate back to Eshelby coordinate
-          vectmp(:,1)=(/ux,uy,uz/) 
-          vectmp=matmul(transpose(R),vectmp)  
+          vectmp(:,1)=(/ux,uy,uz/)
+          vectmp=matmul(transpose(R),vectmp)
           ux=vectmp(1,1); uy=vectmp(2,1); uz=vectmp(3,1)
           tenstmp=reshape((/exx,eyx,ezx,exy,eyy,ezy,exz,eyz,ezz/),(/3,3/),     &
-                          (/f0,f0/),(/2,1/))  
+                          (/f0,f0/),(/2,1/))
           tenstmp=matmul(matmul(transpose(R),tenstmp),R)
           strain(:,1)=(/tenstmp(1,1),tenstmp(2,2),tenstmp(3,3),(tenstmp(1,2)+  &
                         tenstmp(2,1))/f2,(tenstmp(2,3)+tenstmp(3,2))/f2,       &
@@ -703,6 +703,6 @@ contains
           sol(j,4:9)=sol(j,4:9)+stress(:,1)
        end do
     end do
-  end subroutine OkSol  
+  end subroutine OkSol
 
 end module esh3d
