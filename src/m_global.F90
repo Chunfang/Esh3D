@@ -17,7 +17,7 @@ module global
 #endif
   ! Global variables
   integer :: nnds,nels,ntrc,ntrc_loc,nobs,nobs_loc,nellip,nellip_loc,nrect,    &
-     ntol,nfix,n_incl
+     ntol,nfix,nsolid,nfluid
   real(8) :: val,top,rstress(6),tol,mat(2)
   integer,allocatable :: nodes(:,:),work(:),onlst(:,:),surfel_glb(:),surfel(:),&
      surfside_glb(:),surfside(:),idface(:),oel(:),eel(:),bc(:,:),ndfix_glb(:), &
@@ -27,14 +27,16 @@ module global
      surfloc_glb(:,:),surfloc(:,:),surfmat_glb(:,:),surfmat(:,:),surf_glb(:),  &
      surf(:),surfdat_glb(:,:),surfdat(:,:),resid(:),odat_glb(:,:),odat(:,:),   &
      rect(:,:),surfnrm_glb(:,:),instress(:,:),ellipeff(:,:),solfix(:,:),       &
-     Keig(:,:),Feig(:),solok(:,:)
+     Keig(:,:),Feig(:),solok(:,:),Kvol(:,:),Fvol(:),Wsec(:,:),Esec(:),Vsec(:)
+     !,KeigInv(:,:),KeigFldInv(:,:),EffEig(:,:)
   real(8),allocatable,target :: uu(:),uu0(:)
   character(12) :: stype
   character(256) :: output_file
   logical :: full,half,fini,incl,inho
-  Vec :: Vec_F,Vec_U,Vec_Feig,Vec_Eig,Vec_incl,Vec_FixC,Vec_Fix,Vec_FixF
-  Mat :: Mat_K,Mat_Keig,Mat_Kfull
-  KSP :: KryInc,Krylov
+  Vec :: Vec_F,Vec_U,Vec_Feig,Vec_Eig,Vec_incl,Vec_FixC,Vec_Fix,Vec_FixF,      &
+     Vec_Fvol,Vec_Evol
+  Mat :: Mat_K,Mat_Kfull,Mat_Keig,Mat_Kfld,Mat_Kvol
+  KSP :: Krylov,KryInc,KryFld,KryVol
   PC :: PreCon
   ! Local element/side/node variables
   integer :: el,side,node
@@ -267,17 +269,6 @@ contains
     end do
     call VecAssemblyBegin(Vec_F,ierr)
     call VecAssemblyEnd(Vec_F,ierr)
-    !if (fini) then ! Cancel fixed dofs only for finite domain
-    !   do i=1,nfix
-    !      do j=1,3
-    !         if (bcfix(i,j)==0) then
-    !            vectmp(1)=-(solfix(i,j)-uu0((ndfix(i)-1)*3+j))
-    !            j1=(nl2g(ndfix(i),2)-1)*3+j-1
-    !            call VecSetValue(Vec_F,j1,vectmp(1),Add_Values,ierr)
-    !         end if
-    !      end do
-    !   end do
-    !end if
     if (fini) call FixBndVecF
   end subroutine MatchSurf
 
@@ -587,56 +578,70 @@ contains
     end if
   end subroutine ObsSup
 
-  ! Update interactive eiginstrain Vec_Eig -> ellipeff(12:17)
-  subroutine UpInhoEigen(eigen)
+  subroutine Evol2Feig(vm,ellip)
     implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
 #endif
-    integer :: nellip,i,j,j1,j2,idx(6)
+    integer :: i,j,j1,j2,idx(6)
+    real(8) :: vm,ellip(:,:),vec(6),strain(6),Ch(6,6)
+    call VecZeroEntries(Vec_Feig,ierr); Feig=f0
+    call VecGetOwnershipRange(Vec_Evol,j1,j2,ierr)
+    do i=1,nfluid
+       idx=(/((i-1)*6+j-1,j=1,6)/)
+       vec=f0
+       if (idx(1)>=j1 .and. idx(6)<j2) call VecGetValues(Vec_Evol,6,idx,vec,   &
+          ierr)
+       call MPI_AllReduce(vec,strain,6,MPI_Real8,MPI_Sum,MPI_Comm_World,ierr)
+       call Cmat(f3*ellip(nsolid+i,10)*(f1-f2*vm),vm,Ch)
+       strain=matmul(Ch,strain)
+       if (rank==nprcs-1) call VecSetValues(Vec_Feig,6,(/nsolid*6+idx/),strain, &
+          Add_Values,ierr)
+        Feig((/nsolid*6+idx+1/))=strain
+    end do
+    call VecAssemblyBegin(Vec_Feig,ierr)
+    call VecAssemblyEnd(Vec_Feig,ierr)
+  end subroutine Evol2Feig
+
+  ! Update interacting eiginstrain Vec_Eig -> ellipeff(12:17)
+  subroutine UpInhoEigen(eigen,fluid)
+    implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#include "petsc.h"
+#endif
+    logical,optional :: fluid
+    logical :: fld
+    integer :: i,n,j,j1,j2,idx(6)
     real(8) :: eigen(:,:),vec(6),strain(6)
-    ! To use LAPPACK instead
-    real(8),allocatable :: matinv(:,:),vectmp(:),work(:)
-    integer,allocatable :: ipiv(:)
-    integer :: info
-    nellip=size(eigen,1)
+    fld=.false.
+    if (present(fluid)) fld=fluid
     call VecGetOwnershipRange(Vec_Eig,j1,j2,ierr)
-    do i=1,nellip
+    n=size(eigen,1)
+    do i=1,n
        idx=(/((i-1)*6+j-1,j=1,6)/)
        vec=f0
        if (idx(1)>=j1 .and. idx(6)<j2) call VecGetValues(Vec_Eig,6,idx,vec,ierr)
        call MPI_AllReduce(vec,strain,6,MPI_Real8,MPI_Sum,MPI_Comm_World,ierr)
-       eigen(i,:)=strain
+       if (fld) then
+          eigen(i,:)=eigen(i,:)+strain
+       else
+         eigen(i,:)=strain
+       end if
     end do
-    ! LAPPACK matrix inversion
-    j=6*nellip
-    allocate(matinv(j,j),vectmp(j),work(j),ipiv(j))
-
-    !print('(30(ES11.2E3,X))'), Feig
-    !do i=1,nellip
-    !   vectmp((/((i-1)*6+j,j=1,6)/))=eigen(i,:)
-    !end do
-    !print('(30(ES11.2E3,X))'), matmul(Keig,vectmp)
-
-    matinv=Keig
-    call DGETRF(j,j,matinv,j,ipiv,info)
-    call DGETRI(j,matinv,j,ipiv,work,j,info)
-    vectmp=matmul(matinv,Feig)
-    do i=1,nellip
-       eigen(i,:)=vectmp((/((i-1)*6+j,j=1,6)/))
-    end do
-
-    !print('(30(ES11.2E3,X))'), matmul(Keig,vectmp)
   end subroutine UpInhoEigen
 
   ! Evaluate inclusions stress changes uu (solok) -> instress(nellip,6)
   subroutine InStrEval(ok)
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#include "petsc.h"
+#endif
     integer :: ii,i,j,row(eldof)
-    real(8) :: strtmp(6),estress(nip,6)
+    real(8) :: strtmp(6),estress(nip,6),ones(nellip),cnt
     logical :: okval
     logical,optional :: ok ! Include Okada source
-    instress=f0 ! Rest inclusion stress
+    instress=f0 ! Reset inclusion stress
+    ones=f0
     do ii=1,nellip_loc
        enodes=nodes(eel(ii),:)
        do i=1,npel
@@ -648,6 +653,7 @@ contains
                 sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)        &
                 /dble(nip)
        instress(el2g(ii),:)=strtmp
+       ones(el2g(ii))=ones(el2g(ii))+f1
     end do
     if (present(ok)) then
        okval=ok
@@ -657,6 +663,8 @@ contains
     do ii=1,nellip
        call MPI_AllReduce(instress(ii,:),strtmp,6,MPI_Real8,MPI_Sum,           &
           MPI_Comm_World,ierr)
+       call MPI_AllReduce(ones(ii),cnt,1,MPI_Real8,MPI_Sum,MPI_Comm_World,ierr)
+       strtmp=strtmp/max(cnt,f1) ! Scale duplicates
        if (okval) strtmp=strtmp+solok(ii,4:9)
        instress(ii,:)=strtmp
     end do

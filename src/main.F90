@@ -19,7 +19,7 @@ program main
   logical :: l
   integer,pointer :: null_i=>null()
   real(8),pointer :: null_r=>null()
-  integer :: n,i,j,j1,j2,nodal_bw,incl_bw,status(MPI_STATUS_SIZE)
+  integer :: n,i,j,j1,j2,n_incl,nodal_bw,incl_bw,status(MPI_STATUS_SIZE)
   integer,allocatable :: hit(:)
 
   call PetscInitialize(Petsc_Null_Character,ierr)
@@ -250,15 +250,25 @@ program main
   end if
   do i=1,nellip
      if (incl) then
-        read(10,*)ellip(i,:9),ellip(i,12:)
-        ellip(i,10:11)=mat
+        if (i<=nsolid) then
+           read(10,*)ellip(i,:9),ellip(i,12:)
+           ellip(i,10:11)=mat
+        else ! Inclusions can only be solid.
+           read(10,*)val
+        end if
      elseif (inho) then
-        read(10,*)ellip(i,:)
+        if (i<=nsolid) then
+           read(10,*)ellip(i,:)
+        else
+           read(10,*)ellip(i,:10),ellip(i,12)
+           ellip(i,11)=-f1 ! Negative "Poisson's ratio" indicates fluid.
+           ellip(i,13:14)=f0; ellip(i,15:)=f0
+        end if
      end if
      ellip(i,1:6)=km2m*ellip(i,1:6) ! Centroids and semi-axises
   end do
 
-  !Translate eigenstrain from inclusion coordinate to global coordinate
+  ! Translate eigenstrain from inclusion coordinate to global coordinate
   call EigIncl2Glb(ellip)
   ! ellipeff with evolving eigen sources
   allocate(ellipeff(nellip,17)); ellipeff=ellip
@@ -277,12 +287,12 @@ program main
   ! Global linear system matrix for interactive inhomogeneities
   if (inho) then
      n=nellip*6
-     incl_bw=3+(nellip-1)*6
-     allocate(Keig(n,n),Feig(n))
+     incl_bw=n
+     allocate(Keig(n,n),Feig(n))!,EffEig(nellip,6))
      call EshKeig(mat(1),mat(2),ellip,Keig)
-     !do i=1,nellip*6
-     !   if(rank==0)print('(30(ES11.2E3,X))'), Keig(i,:)
-     !end do
+     ! LAPACK inversion
+     !allocate(KeigInv(n,n))
+     !call MatInv(Keig,KeigInv)
      ! Entries of one stress tensor are not split by different ranks
      call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nellip,Vec_incl,ierr)
      call VecGetLocalSize(Vec_incl,n_incl,ierr)
@@ -295,7 +305,7 @@ program main
      !   Petsc_Null_Scalar,Mat_Keig,ierr)
      ! From [Keig]
      if (rank==nprcs-1) call MatSetValues(Mat_Keig,n,(/(i,i=0,n-1)/),n,        &
-        (/(i,i=0,n-1)/),Keig,Insert_Values,ierr)
+        (/(i,i=0,n-1)/),transpose(Keig),Insert_Values,ierr)
      call MatAssemblyBegin(Mat_Keig,Mat_Final_Assembly,ierr)
      call MatAssemblyEnd(Mat_Keig,Mat_Final_Assembly,ierr)
      call KSPCreate(Petsc_Comm_World,KryInc,ierr)
@@ -308,6 +318,55 @@ program main
      !call SetupKSPSolver(KryInc)
      call VecCreateMPI(Petsc_Comm_World,n_incl*6,n,Vec_Feig,ierr)
      call VecDuplicate(Vec_Feig,Vec_Eig,ierr)
+     if (nellip-nsolid>0) then ! Has fluid inclusions
+        call EshKeig(mat(1),mat(2),ellip,Keig,Kfluid=.true.)
+        !allocate(KeigFldInv(n,n))
+        !call MatInv(Keig,KeigFldInv)
+        call MatDuplicate(Mat_Keig,Mat_Do_Not_Copy_Values,Mat_Kfld,ierr)
+        if (rank==nprcs-1) call MatSetValues(Mat_Kfld,n,(/(i,i=0,n-1)/),n,     &
+           (/(i,i=0,n-1)/),transpose(Keig),Insert_Values,ierr)
+        call MatAssemblyBegin(Mat_Kfld,Mat_Final_Assembly,ierr)
+        call MatAssemblyEnd(Mat_Kfld,Mat_Final_Assembly,ierr)
+        call KSPCreate(Petsc_Comm_World,KryFld,ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
+        call KSPSetOperators(KryFld,Mat_Kfld,Mat_Kfld,                         &
+           Different_Nonzero_Pattern,ierr)
+#else
+        call KSPSetOperators(KryFld,Mat_Kfld,Mat_Kfld,ierr)
+#endif
+        !call SetupKSPSolver(KryFld)
+        nfluid=(nellip-nsolid)
+        n=6*nfluid; incl_bw=n
+        allocate(Kvol(n,n),Fvol(n))
+        call EshKvol(mat(1),mat(2),ellip(nsolid+1:,:),Kvol)
+        ! Entries of one stress tensor are not split by different ranks
+        call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nfluid,Vec_incl,ierr)
+        call VecGetLocalSize(Vec_incl,n_incl,ierr)
+        call VecDestroy(Vec_incl,ierr)
+        call MatCreateAIJ(Petsc_Comm_World,n_incl*6,n_incl*6,n,n,incl_bw,      &
+           Petsc_Null_Integer,incl_bw,Petsc_Null_Integer,Mat_Kvol,ierr)
+        call MatSetOption(Mat_Kvol,Mat_New_Nonzero_Allocation_Err,             &
+           Petsc_False,ierr)
+        if (rank==nprcs-1) call MatSetValues(Mat_Kvol,n,(/(i,i=0,n-1)/),n,     &
+           (/(i,i=0,n-1)/),transpose(Kvol),Insert_Values,ierr)
+        call MatAssemblyBegin(Mat_Kvol,Mat_Final_Assembly,ierr)
+        call MatAssemblyEnd(Mat_Kvol,Mat_Final_Assembly,ierr)
+        call KSPCreate(Petsc_Comm_World,KryVol,ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
+        call KSPSetOperators(KryVol,Mat_Kvol,Mat_Kvol,                         &
+           Different_Nonzero_Pattern,ierr)
+#else
+        call KSPSetOperators(KryVol,Mat_Kvol,Mat_Kvol,ierr)
+#endif
+        !call SetupKSPSolver(KryVol)
+        call VecCreateMPI(Petsc_Comm_World,n_incl*6,n,Vec_Fvol,ierr)
+        call VecDuplicate(Vec_Fvol,Vec_Evol,ierr)
+        if (nsolid>0) then ! Mixed solid fluid inclusions
+           ! [V] = -[W][E]
+           allocate(Wsec(n,6*nsolid),Esec(6*nsolid),Vsec(n))
+           call EshWsec(mat(1),mat(2),ellip,Wsec)
+        end if
+     end if
   end if
 
   ! Full space Eshelby's solution
@@ -318,14 +377,36 @@ program main
         end do
         ! Form [Feig]
         call EshFeig(mat(1),mat(2),instress,ellip,Feig,init=.true.)
+        ! Non-Interacting effective eigenstrain
+        !call EshEffEig(mat(1),mat(2),instress,ellip,EffEig,init=.true.)
         if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,                &
            (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
         call VecAssemblyBegin(Vec_Feig,ierr)
         call VecAssemblyEnd(Vec_Feig,ierr)
         call KSPSolve(KryInc,Vec_Feig,Vec_Eig,ierr)
         call UpInhoEigen(ellipeff(:,12:17))
+        if (nfluid>0) then ! Has fluid inclusion
+           !Feig=f0
+           !call FluidPushBack(mat(:2),ellipeff(nsolid+1:,:),Feig(nsolid+1:),   &
+           !   einit=ellip(nsolid+1:,12)) ! => Feig
+           !if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,             &
+           !   (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
+           !call VecAssemblyBegin(Vec_Feig,ierr)
+           !call VecAssemblyEnd(Vec_Feig,ierr)
+           call GetFvol(ellipeff(nsolid+1:,:),Fvol,einit=ellip(nsolid+1:,12))
+           if (rank==nprcs-1) call VecSetValues(Vec_Fvol,nfluid*6,             &
+              (/(i,i=0,nfluid*6-1)/),Fvol,Insert_Values,ierr)
+           call VecAssemblyBegin(Vec_Fvol,ierr)
+           call VecAssemblyEnd(Vec_Fvol,ierr)
+           call KSPSolve(KryVol,Vec_Fvol,Vec_Evol,ierr)
+           call Evol2Feig(mat(2),ellip) ! Intrinsic fluid eigenstrains to RHS
+           call KSPSolve(KryFld,Vec_Feig,Vec_Eig,ierr)
+           call UpInhoEigen(ellipeff(:,12:17),fluid=.true.) ! Superpose
+        end if
+        call EshIncSol(mat(1),mat(2),ellipeff,ocoord,odat_glb(:,:9))
+     else
+        call EshIncSol(mat(1),mat(2),ellipeff(:nsolid,:),ocoord,odat_glb(:,:9))
      end if
-     call EshIncSol(mat(1),mat(2),ellipeff,ocoord,odat_glb(:,:9))
   end if
 
   if (half .or. fini) then
@@ -389,30 +470,61 @@ program main
            instress(i,:)=instress(i,:)+rstress
         end do
         call EshFeig(mat(1),mat(2),instress,ellip,Feig,init=.true.)
+        !call EshEffEig(mat(1),mat(2),instress,ellip,EffEig,init=.true.)
         if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,                &
            (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
         call VecAssemblyBegin(Vec_Feig,ierr)
         call VecAssemblyEnd(Vec_Feig,ierr)
         call KSPSolve(KryInc,Vec_Feig,Vec_Eig,ierr)
         call UpInhoEigen(ellipeff(:,12:17))
+        if (nfluid>0) then ! Has fluid inclusion
+           !Feig=f0
+           !call FluidPushBack(mat(:2),ellipeff(nsolid+1:,:),Feig(nsolid+1:),   &
+           !   einit=ellip(nsolid+1:,12))
+           !if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,             &
+           !   (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
+           !call VecAssemblyBegin(Vec_Feig,ierr)
+           !call VecAssemblyEnd(Vec_Feig,ierr)
+           call GetFvol(ellipeff(nsolid+1:,:),Fvol,einit=ellip(nsolid+1:,12))
+           if (rank==nprcs-1) call VecSetValues(Vec_Fvol,nfluid*6,             &
+              (/(i,i=0,nfluid*6-1)/),Fvol,Insert_Values,ierr)
+           call VecAssemblyBegin(Vec_Fvol,ierr)
+           call VecAssemblyEnd(Vec_Fvol,ierr)
+           call KSPSolve(KryVol,Vec_Fvol,Vec_Evol,ierr)
+           call Evol2Feig(mat(2),ellip) ! Intrinsic fluid eigenstrains to RHS
+           call KSPSolve(KryFld,Vec_Feig,Vec_Eig,ierr)
+           call UpInhoEigen(ellipeff(:,12:17),fluid=.true.)
+        end if
      end if
 
      ! Full space solution at traction surface
      if (ntrc_loc>0) then
-        call EshIncSol(mat(1),mat(2),ellipeff,surfloc,surfdat(:,:9))
+        if (incl) then ! Inclusions have to be solid
+           call EshIncSol(mat(1),mat(2),ellipeff,surfloc(:nsolid,:),surfdat(:,:9))
+        else
+           call EshIncSol(mat(1),mat(2),ellipeff,surfloc,surfdat(:,:9))
+        end if
         ! Add Okada fault solution
         if (nrect>0) call OkSol(mat(1),mat(2),rect,surfloc,top,surfdat(:,:9))
         surfdat(:,10:)=surfdat(:,:9)
      end if
      ! Full space solution at fix boundary
      if (fini) then
-        call EshIncSol(mat(1),mat(2),ellipeff,coords(ndfix,:),solfix)
+        if (incl) then
+           call EshIncSol(mat(1),mat(2),ellipeff(:nsolid,:),coords(ndfix,:),solfix)
+        else
+           call EshIncSol(mat(1),mat(2),ellipeff,coords(ndfix,:),solfix)
+        end if
         if (nrect>0) call OkSol(mat(1),mat(2),rect,coords(ndfix,:),top,solfix)
      end if
      ! Full space solution at observation
      call GetObsNd("ob"); allocate(odat(nobs_loc,18)); odat=f0
      if (nobs_loc>0) then
-        call EshIncSol(mat(1),mat(2),ellipeff,ocoord_loc,odat(:,:9))
+        if (incl) then
+           call EshIncSol(mat(1),mat(2),ellipeff(:nsolid,:),ocoord_loc,odat(:,:9))
+        else
+           call EshIncSol(mat(1),mat(2),ellipeff,ocoord_loc,odat(:,:9))
+        end if
         if (nrect>0) call OkSol(mat(1),mat(2),rect,ocoord_loc,top,odat(:,:9))
         odat(:,10:)=odat(:,:9)
      end if
@@ -433,16 +545,33 @@ program main
         i=i+1
         call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
         call GetVec_U
-
-        if (inho) then ! surface -> inclusion interaction
+        if (inho) then ! Surface <-> inclusion interaction
            call InStrEval
            call EshFeig(mat(1),mat(2),instress,ellip,Feig)
+           !call EshEffEig(mat(1),mat(2),instress,ellip,EffEig)
            if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,             &
               (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
            call VecAssemblyBegin(Vec_Feig,ierr)
            call VecAssemblyEnd(Vec_Feig,ierr)
            call KSPSolve(KryInc,Vec_Feig,Vec_Eig,ierr)
            call UpInhoEigen(ellipeff(:,12:17))
+           if (nfluid>0) then ! Has fluid inclusion
+              !Feig=f0
+              !call FluidPushBack(mat(:2),ellipeff(nsolid+1:,:),Feig(nsolid+1:))
+              !if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,          &
+              !   (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
+              !call VecAssemblyBegin(Vec_Feig,ierr)
+              !call VecAssemblyEnd(Vec_Feig,ierr)
+              call GetFvol(ellipeff(nsolid+1:,:),Fvol)
+              if (rank==nprcs-1) call VecSetValues(Vec_Fvol,nfluid*6,          &
+                 (/(i,i=0,nfluid*6-1)/),Fvol,Insert_Values,ierr)
+              call VecAssemblyBegin(Vec_Fvol,ierr)
+              call VecAssemblyEnd(Vec_Fvol,ierr)
+              call KSPSolve(KryVol,Vec_Fvol,Vec_Evol,ierr)
+              call Evol2Feig(mat(2),ellip) ! Intrinsic fluid eigenstrains to RHS
+              call KSPSolve(KryFld,Vec_Feig,Vec_Eig,ierr)
+              call UpInhoEigen(ellipeff(:,12:17),fluid=.true.)
+           end if
            call EshIncSol(mat(1),mat(2),ellipeff,surfloc,surfdat(:,10:))
            if (nobs_loc>0) call EshIncSol(mat(1),mat(2),ellipeff,ocoord_loc,   &
               odat(:,10:))
@@ -489,9 +618,9 @@ contains
     if (index(stype,"incl")/=0) incl=.true.
     if (index(stype,"inho")/=0) inho=.true.
     if (full) then
-       read(10,*)nellip,nobs
+       read(10,*)nellip,nsolid,nobs
     else
-       read(10,*)nellip,nrect,nobs
+       read(10,*)nellip,nsolid,nrect,nobs
     end if
     if (k==0) then
        allocate(ocoord(nobs,3))
@@ -556,7 +685,7 @@ contains
     call MPI_Reduce(dattmp,buf,nobs*18,MPI_Real8,MPI_Sum,nprcs-1,              &
        MPI_Comm_World,ierr)
     ones=reshape(buf,(/nobs,18/))
-    if (rank==nprcs-1) odat_glb=odat_glb/ones
+    if (rank==nprcs-1) odat_glb=odat_glb/max(ones,f1) ! Scale duplicates
   end subroutine ObsGather
 
   ! Gather 2D data by last rank

@@ -44,6 +44,25 @@ contains
     deallocate(ipiv,work)
   end subroutine MatInv
 
+  ! Computes eigenvalue/vector of a real symmetric matrix
+  subroutine EigValVec(A,EigVec,EigVal)
+    implicit none
+    integer :: ndim,n,lwork,liwork,info
+    integer,allocatable :: iwork(:)
+    real(8) :: A(:,:),EigVec(:,:),EigVal(:)
+    real(8),allocatable :: work(:)
+    n=1000; allocate(work(n),iwork(n))
+    ndim=min(size(A,1),size(A,2))
+    EigVec=A(:ndim,:ndim)
+    ! Eigen values of eientstrain
+    call DSYEVD('Vectors','Upper',ndim,EigVec,ndim,EigVal,work,-1,iwork,-1,info)
+    lwork=min(n,int(work(1)))
+    liwork=min(n,iwork(1))
+    call DSYEVD('Vectors','Upper',ndim,EigVec,ndim,EigVal,work,lwork,iwork,         &
+       liwork,info)
+    deallocate(work,iwork)
+  end subroutine EigValVec
+
   ! Computes determinant of a matrix of size 2/3
   subroutine MatDet(A,det)
     implicit none
@@ -52,6 +71,28 @@ contains
     if (size(A,1)==3) det=A(1,1)*(A(2,2)*A(3,3)-A(2,3)*A(3,2))-                &
        A(1,2)*(A(2,1)*A(3,3)-A(2,3)*A(3,1))+A(1,3)*(A(2,1)*A(3,2)-A(2,2)*A(3,1))
   end subroutine MatDet
+
+  recursive function DetN(a,n,permanent) result(accumulation)
+    ! setting permanent to 1 computes the permanent.
+    ! setting permanent to -1 computes the determinant.
+    real(8), dimension(n,n), intent(in) :: a
+    integer, intent(in) :: n, permanent
+    real(8), dimension(n-1, n-1) :: b
+    real(8) :: accumulation
+    integer :: i, sgn
+    if (n .eq. 1) then
+      accumulation = a(1,1)
+    else
+      accumulation = 0
+      sgn = 1
+      do i=1, n
+        b(:, :(i-1)) = a(2:, :i-1)
+        b(:, i:) = a(2:, i+1:)
+        accumulation = accumulation + sgn * a(1, i) * DetN(b, n-1, permanent)
+        sgn = sgn * permanent
+      enddo
+    endif
+  end function DetN
 
   !===============================================================================
   !  This file contains some Fortran 90 programs to compute incomplete elliptic
