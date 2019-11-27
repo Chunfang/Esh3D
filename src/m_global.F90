@@ -18,7 +18,7 @@ module global
   ! Global variables
   integer :: nnds,nels,ntrc,ntrc_loc,nobs,nobs_loc,nellip,nellip_loc,nrect,    &
      ntol,nfix,nsolid,nfluid
-  real(8) :: val,top,rstress(6),tol,mat(2)
+  real(8) :: val,top,rstress(6),tol,rtol,mat(2)
   integer,allocatable :: nodes(:,:),work(:),onlst(:,:),surfel_glb(:),surfel(:),&
      surfside_glb(:),surfside(:),idface(:),oel(:),eel(:),bc(:,:),ndfix_glb(:), &
      ndfix(:),bcfix_glb(:,:),bcfix(:,:)
@@ -34,7 +34,7 @@ module global
   character(256) :: output_file
   logical :: full,half,fini,incl,inho
   Vec :: Vec_F,Vec_U,Vec_Feig,Vec_Eig,Vec_incl,Vec_FixC,Vec_Fix,Vec_FixF,      &
-     Vec_Fvol,Vec_Evol
+     Vec_Fvol,Vec_Evol,Vec_dEig
   Mat :: Mat_K,Mat_Kfull,Mat_Keig,Mat_Kfld,Mat_Kvol
   KSP :: Krylov,KryInc,KryFld,KryVol
   PC :: PreCon
@@ -578,6 +578,7 @@ contains
     end if
   end subroutine ObsSup
 
+  ! Intrinsic fluid eigenstrains to RHS [Evol] -> [Feig]
   subroutine Evol2Feig(vm,ellip)
     implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
@@ -595,9 +596,9 @@ contains
        call MPI_AllReduce(vec,strain,6,MPI_Real8,MPI_Sum,MPI_Comm_World,ierr)
        call Cmat(f3*ellip(nsolid+i,10)*(f1-f2*vm),vm,Ch)
        strain=matmul(Ch,strain)
-       if (rank==nprcs-1) call VecSetValues(Vec_Feig,6,(/nsolid*6+idx/),strain, &
+       if (rank==nprcs-1) call VecSetValues(Vec_Feig,6,nsolid*6+idx,strain,    &
           Add_Values,ierr)
-        Feig((/nsolid*6+idx+1/))=strain
+        Feig(nsolid*6+idx+1)=strain
     end do
     call VecAssemblyBegin(Vec_Feig,ierr)
     call VecAssemblyEnd(Vec_Feig,ierr)
@@ -629,6 +630,49 @@ contains
        end if
     end do
   end subroutine UpInhoEigen
+
+  ! Vec_dEig -> Esec
+  subroutine GetEigSec(Esec)
+    implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#include "petsc.h"
+#endif
+    integer :: i,j,j1,j2,idx(6)
+    real(8) :: Esec(:),vec0(6),vec1(6)
+    call VecGetOwnershipRange(Vec_dEig,j1,j2,ierr)
+    do i=1,nsolid
+       idx=(/((i-1)*6+j-1,j=1,6)/)
+       vec0=f0
+       if (idx(1)>=j1 .and. idx(6)<j2) call VecGetValues(Vec_dEig,6,idx,vec0,  &
+          ierr)
+       call MPI_AllReduce(vec0,vec1,6,MPI_Real8,MPI_Sum,MPI_Comm_World,ierr)
+       Esec(idx+1)=vec1
+    end do
+  end subroutine GetEigSec
+
+  ! L2 covergence of a n*nelem vector Vect = Vect + dVect
+  subroutine ConvergeL2(Vect,dVect,n,nelem,conv)
+    implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#include "petsc.h"
+#endif
+    integer :: i,j,j1,j2,n,nelem,idx(nelem)
+    real(8) :: vec0(nelem),vec1(nelem),tmp,resid,conv
+    Vec :: Vect,dVect
+    call VecGetOwnershipRange(Vect,j1,j2,ierr)
+    resid=f0
+    do i=1,(j2-j1)/nelem
+       idx=j1+(/((i-1)*6+j-1,j=1,nelem)/)
+       call VecGetValues(Vect,6,idx,vec0,ierr)
+       call VecGetValues(dVect,6,idx,vec1,ierr)
+       tmp=sqrt(sum(vec0*vec0))
+       if (tmp>0) then
+          tmp=sqrt(sum(vec1*vec1))/tmp
+          if (tmp>resid) resid=tmp
+       end if
+    end do
+    call MPI_AllReduce(resid,conv,1,MPI_Real8,MPI_Max,MPI_Comm_World,ierr)
+  end subroutine ConvergeL2
 
   ! Evaluate inclusions stress changes uu (solok) -> instress(nellip,6)
   subroutine InStrEval(ok)

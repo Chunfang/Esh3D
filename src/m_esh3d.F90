@@ -589,7 +589,8 @@ contains
     real(8) :: Em,vm,fluid(:,:),Kvol(:,:),ang(3),a(3),tmp,exh(3,3),R_init(3,3),&
        Rb_init(3,3),R(3,3),Rb(3,3),PIvec(3),Cm(6,6),Ch(6,6),S2(6,6),G2(6,6),   &
        I6(6,6),R2(3,3),R2b(3,3),S2g(6,6),T2e(6,6),mat6(6,6),xobs(3),           &
-       D4(3,3,3,3),D2(6,6),D2g(6,6),fderphi(3),tderpsi(3,3,3),H2c(6,6),H2(6,6)
+       D4(3,3,3,3),D2(6,6),D2g(6,6),fderphi(3),tderpsi(3,3,3),H2c(6,6),H2(6,6),&
+       E2c(6,6),E2(6,6)
     I6=f0
     do i=1,6
        I6(i,i)=f1
@@ -628,6 +629,8 @@ contains
        call Matinv(Cm-matmul(Cm-Ch,S2g),mat6)
        G2=matmul(matmul(S2g-I6,mat6),Ch)
        H2c=matmul(matmul(S2g-I6,mat6),Cm-Ch)+I6
+       call Matinv(Ch,E2c)
+       E2c=matmul(E2c,Cm-Ch)
        k=(i-1)*6+1
        Kvol(k,      k:k+5)=sum(T2e(:3,:),dim=1)
        Kvol(k+1,    k:k+5)=G2(1,:)-G2(2,:)
@@ -673,9 +676,10 @@ contains
              call Cmat(f3*fluid(j,10)*(f1-f2*vm),vm,Ch)
              call Matinv(Cm-matmul(Cm-Ch,S2g),mat6)
              H2=matmul(matmul(matmul(H2c,D2g),mat6),Ch)
+             E2=matmul(matmul(matmul(E2c,D2g),mat6),Ch)
              k=(i-1)*6+1; l=(j-1)*6+1
-             T2e=matmul(T2e,H2)
-             Kvol(k,      l:k+5)=sum(T2e(:3,:),dim=1)
+             E2=matmul(T2e,E2)
+             Kvol(k,      l:l+5)=sum(E2(:3,:),dim=1)
              Kvol(k+1,    l:l+5)=H2(1,:)-H2(2,:)
              Kvol(k+2,    l:l+5)=H2(2,:)-H2(3,:)
              Kvol(k+3:k+5,l:l+5)=H2(4:,:)
@@ -772,7 +776,7 @@ contains
     end do
   end subroutine EshWsec
 
-  ! Consider fluid pushback => [GetFvol]
+  ! Consider fluid pushback => [Fvol]
   subroutine GetFvol(fluid,Fvol,einit)
     implicit none
     integer :: i,j
@@ -792,6 +796,22 @@ contains
        Fvol(j)=EpsV0-sum(vectmp) ! Volume strain
     end do
   end subroutine GetFvol
+
+  ! Consider fluid-solid-fluid ineraction => [Fvol]
+  subroutine GetSecFvol(Vsec,Fvol)
+    implicit none
+    integer :: i,j
+    real(8) :: Vsec(:),Fvol(:),mattmp0(3,3),mattmp1(3,3),vectmp(3)
+    do i=1,size(Fvol)/6
+       j=6*(i-1)+1
+       call Vec2Mat(Vsec(j:j+5),mattmp0)
+       ! Eigen values of eientstrain (LAPACK)
+       call EigValVec(mattmp0,mattmp1,vectmp)
+       Fvol(j)=sum(vectmp) ! Volume strain
+       Fvol(j+1:j+2)=Vsec(j:j+1)-Vsec(j+1:j+2)
+       Fvol(j+3:)=Vsec(j+3:)
+    end do
+  end subroutine GetSecFvol
 
   subroutine FluidPushBack(moduli,fluid,EigFld,einit)
     implicit none

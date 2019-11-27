@@ -365,6 +365,7 @@ program main
            ! [V] = -[W][E]
            allocate(Wsec(n,6*nsolid),Esec(6*nsolid),Vsec(n))
            call EshWsec(mat(1),mat(2),ellip,Wsec)
+           call VecDuplicate(Vec_Feig,Vec_dEig,ierr)
         end if
      end if
   end if
@@ -541,8 +542,7 @@ program main
      call MatchSurf ! Cancel residual traction/displacement
 
      i=0 ! Half/finite space correction
-     do while(.true. .and. i<ntol+1)
-        i=i+1
+     do while(i<ntol)
         call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
         call GetVec_U
         if (inho) then ! Surface <-> inclusion interaction
@@ -570,6 +570,34 @@ program main
               call KSPSolve(KryVol,Vec_Fvol,Vec_Evol,ierr)
               call Evol2Feig(mat(2),ellip) ! Intrinsic fluid eigenstrains to RHS
               call KSPSolve(KryFld,Vec_Feig,Vec_Eig,ierr)
+              if (nsolid>0) then ! Secodnary interaction
+                 j=0; call VecCopy(Vec_Eig,Vec_dEig,ierr)
+                 do while(j<ntol)
+                    call GetEigSec(Esec) ! Vec_dEig => Esec
+                    if (rank==nprcs-1) then
+                       Vsec=-matmul(Wsec,Esec) ! nsolid -> nfluid
+                       call GetSecFvol(Vsec,Fvol) ! Vsec => Fvol
+                       call VecSetValues(Vec_Fvol,nfluid*6,                    &
+                          (/(i,i=0,nfluid*6-1)/),Fvol,Insert_Values,ierr)
+                    end if
+                    call VecAssemblyBegin(Vec_Fvol,ierr)
+                    call VecAssemblyEnd(Vec_Fvol,ierr)
+                    call KSPSolve(KryVol,Vec_Fvol,Vec_Evol,ierr)
+                    call Evol2Feig(mat(2),ellip)
+                    call KSPSolve(KryFld,Vec_Feig,Vec_dEig,ierr)
+                    call VecAXPY(Vec_Eig,f1,Vec_dEig,ierr)
+                    call ConvergeL2(Vec_Eig,Vec_dEig,nellip,6,val)
+                    if (val<rtol) then
+                       if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,       &
+                          &ES11.2E3)'),"Sub step",j+1,"converge",val,"<",rtol
+                       exit
+                    else
+                       if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,       &
+                          &ES11.2E3)'),"Sub step",j+1,"residual",val,">",rtol
+                    end if
+                    j=j+1
+                 end do
+              end if
               call UpInhoEigen(ellipeff(:,12:17),fluid=.true.)
            end if
            call EshIncSol(mat(1),mat(2),ellipeff,surfloc,surfdat(:,10:))
@@ -587,13 +615,14 @@ program main
            MPI_Comm_World,ierr)
         if (val<tol) then
            if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,ES11.2E3)'),       &
-               "Step",i,"converge ",val,"<",tol
-           go to 8
+               "Step",i+1,"converge",val,"<",tol
+           exit
         else
            if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,ES11.2E3)'),       &
-               "Step",i,"residual traction",val,">",tol
+               "Step",i+1,"residual traction",val,">",tol
         end if
         call MatchSurf
+        i=i+1
      end do
 8    call ObsGather
      allocate(surfdat_glb(ntrc,18),surfnrm_glb(ntrc,3))
@@ -622,6 +651,7 @@ contains
     else
        read(10,*)nellip,nsolid,nrect,nobs
     end if
+    if (nsolid>0 .and. nellip>nsolid) read(10,*)rtol ! Fluid-solid iteration
     if (k==0) then
        allocate(ocoord(nobs,3))
        allocate(ellip(nellip,17),instress(nellip,6)); instress=f0
