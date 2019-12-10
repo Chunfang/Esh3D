@@ -17,7 +17,7 @@ module global
 #endif
   ! Global variables
   integer :: nnds,nels,ntrc,ntrc_loc,nobs,nobs_loc,nellip,nellip_loc,nrect,    &
-     ntol,nfix,nsolid,nfluid
+     ntol,nrtol,nfix,nsolid,nfluid
   real(8) :: val,top,rstress(6),tol,rtol,mat(2)
   integer,allocatable :: nodes(:,:),work(:),onlst(:,:),surfel_glb(:),surfel(:),&
      surfside_glb(:),surfside(:),idface(:),oel(:),eel(:),bc(:,:),ndfix_glb(:), &
