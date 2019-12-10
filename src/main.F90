@@ -387,13 +387,6 @@ program main
         call KSPSolve(KryInc,Vec_Feig,Vec_Eig,ierr)
         call UpInhoEigen(ellipeff(:,12:17))
         if (nfluid>0) then ! Has fluid inclusion
-           !Feig=f0
-           !call FluidPushBack(mat(:2),ellipeff(nsolid+1:,:),Feig(nsolid+1:),   &
-           !   einit=ellip(nsolid+1:,12)) ! => Feig
-           !if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,             &
-           !   (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
-           !call VecAssemblyBegin(Vec_Feig,ierr)
-           !call VecAssemblyEnd(Vec_Feig,ierr)
            call GetFvol(ellipeff(nsolid+1:,:),Fvol,einit=ellip(nsolid+1:,12))
            if (rank==nprcs-1) call VecSetValues(Vec_Fvol,nfluid*6,             &
               (/(i,i=0,nfluid*6-1)/),Fvol,Insert_Values,ierr)
@@ -402,15 +395,30 @@ program main
            call KSPSolve(KryVol,Vec_Fvol,Vec_Evol,ierr)
            call Evol2Feig(mat(2),ellip) ! Intrinsic fluid eigenstrains to RHS
            call KSPSolve(KryFld,Vec_Feig,Vec_Eig,ierr)
+           if (nsolid>0) then ! Secodnary interaction
+              j=0; call VecCopy(Vec_Eig,Vec_dEig,ierr)
+              do while(j<nrtol)
+                 call CoupleFSF(val) ! Fluid -> solid -> fluid coupling
+                 if (val<rtol) then
+                    if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,          &
+                       &ES11.2E3)'),"Sub step",j+1,"converge",val,"<",rtol
+                    exit
+                 else
+                    if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,          &
+                       &ES11.2E3)'),"Sub step",j+1,"residual",val,">",rtol
+                 end if
+                 j=j+1
+              end do
+           end if
            call UpInhoEigen(ellipeff(:,12:17),fluid=.true.) ! Superpose
         end if
         call EshIncSol(mat(1),mat(2),ellipeff,ocoord,odat_glb(:,:9))
      else
         call EshIncSol(mat(1),mat(2),ellipeff(:nsolid,:),ocoord,odat_glb(:,:9))
      end if
-  end if
 
-  if (half .or. fini) then
+  ! Tuncated space involving numerical boundary condition solutions.
+  elseif (half .or. fini) then
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
      if (rank==nprcs-1) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
      allocate(surfdat(ntrc_loc,18)); surfdat=f0
@@ -479,13 +487,6 @@ program main
         call KSPSolve(KryInc,Vec_Feig,Vec_Eig,ierr)
         call UpInhoEigen(ellipeff(:,12:17))
         if (nfluid>0) then ! Has fluid inclusion
-           !Feig=f0
-           !call FluidPushBack(mat(:2),ellipeff(nsolid+1:,:),Feig(nsolid+1:),   &
-           !   einit=ellip(nsolid+1:,12))
-           !if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,             &
-           !   (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
-           !call VecAssemblyBegin(Vec_Feig,ierr)
-           !call VecAssemblyEnd(Vec_Feig,ierr)
            call GetFvol(ellipeff(nsolid+1:,:),Fvol,einit=ellip(nsolid+1:,12))
            if (rank==nprcs-1) call VecSetValues(Vec_Fvol,nfluid*6,             &
               (/(i,i=0,nfluid*6-1)/),Fvol,Insert_Values,ierr)
@@ -494,6 +495,21 @@ program main
            call KSPSolve(KryVol,Vec_Fvol,Vec_Evol,ierr)
            call Evol2Feig(mat(2),ellip) ! Intrinsic fluid eigenstrains to RHS
            call KSPSolve(KryFld,Vec_Feig,Vec_Eig,ierr)
+           if (nsolid>0) then ! Secodnary interaction
+              j=0; call VecCopy(Vec_Eig,Vec_dEig,ierr)
+              do while(j<nrtol)
+                 call CoupleFSF(val) ! Fluid -> solid -> fluid coupling
+                 if (val<rtol) then
+                    if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,          &
+                       &ES11.2E3)'),"Sub step",j+1,"converge",val,"<",rtol
+                    exit
+                 else
+                    if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,          &
+                       &ES11.2E3)'),"Sub step",j+1,"residual",val,">",rtol
+                 end if
+                 j=j+1
+              end do
+           end if
            call UpInhoEigen(ellipeff(:,12:17),fluid=.true.)
         end if
      end if
@@ -501,7 +517,8 @@ program main
      ! Full space solution at traction surface
      if (ntrc_loc>0) then
         if (incl) then ! Inclusions have to be solid
-           call EshIncSol(mat(1),mat(2),ellipeff,surfloc(:nsolid,:),surfdat(:,:9))
+           call EshIncSol(mat(1),mat(2),ellipeff,surfloc(:nsolid,:),           &
+              surfdat(:,:9))
         else
            call EshIncSol(mat(1),mat(2),ellipeff,surfloc,surfdat(:,:9))
         end if
@@ -512,7 +529,8 @@ program main
      ! Full space solution at fix boundary
      if (fini) then
         if (incl) then
-           call EshIncSol(mat(1),mat(2),ellipeff(:nsolid,:),coords(ndfix,:),solfix)
+           call EshIncSol(mat(1),mat(2),ellipeff(:nsolid,:),coords(ndfix,:),   &
+              solfix)
         else
            call EshIncSol(mat(1),mat(2),ellipeff,coords(ndfix,:),solfix)
         end if
@@ -522,7 +540,8 @@ program main
      call GetObsNd("ob"); allocate(odat(nobs_loc,18)); odat=f0
      if (nobs_loc>0) then
         if (incl) then
-           call EshIncSol(mat(1),mat(2),ellipeff(:nsolid,:),ocoord_loc,odat(:,:9))
+           call EshIncSol(mat(1),mat(2),ellipeff(:nsolid,:),ocoord_loc,        &
+              odat(:,:9))
         else
            call EshIncSol(mat(1),mat(2),ellipeff,ocoord_loc,odat(:,:9))
         end if
@@ -556,12 +575,6 @@ program main
            call KSPSolve(KryInc,Vec_Feig,Vec_Eig,ierr)
            call UpInhoEigen(ellipeff(:,12:17))
            if (nfluid>0) then ! Has fluid inclusion
-              !Feig=f0
-              !call FluidPushBack(mat(:2),ellipeff(nsolid+1:,:),Feig(nsolid+1:))
-              !if (rank==nprcs-1) call VecSetValues(Vec_Feig,nellip*6,          &
-              !   (/(i,i=0,nellip*6-1)/),Feig,Insert_Values,ierr)
-              !call VecAssemblyBegin(Vec_Feig,ierr)
-              !call VecAssemblyEnd(Vec_Feig,ierr)
               call GetFvol(ellipeff(nsolid+1:,:),Fvol)
               if (rank==nprcs-1) call VecSetValues(Vec_Fvol,nfluid*6,          &
                  (/(i,i=0,nfluid*6-1)/),Fvol,Insert_Values,ierr)
@@ -572,21 +585,8 @@ program main
               call KSPSolve(KryFld,Vec_Feig,Vec_Eig,ierr)
               if (nsolid>0) then ! Secodnary interaction
                  j=0; call VecCopy(Vec_Eig,Vec_dEig,ierr)
-                 do while(j<ntol)
-                    call GetEigSec(Esec) ! Vec_dEig => Esec
-                    if (rank==nprcs-1) then
-                       Vsec=-matmul(Wsec,Esec) ! nsolid -> nfluid
-                       call GetSecFvol(Vsec,Fvol) ! Vsec => Fvol
-                       call VecSetValues(Vec_Fvol,nfluid*6,                    &
-                          (/(i,i=0,nfluid*6-1)/),Fvol,Insert_Values,ierr)
-                    end if
-                    call VecAssemblyBegin(Vec_Fvol,ierr)
-                    call VecAssemblyEnd(Vec_Fvol,ierr)
-                    call KSPSolve(KryVol,Vec_Fvol,Vec_Evol,ierr)
-                    call Evol2Feig(mat(2),ellip)
-                    call KSPSolve(KryFld,Vec_Feig,Vec_dEig,ierr)
-                    call VecAXPY(Vec_Eig,f1,Vec_dEig,ierr)
-                    call ConvergeL2(Vec_Eig,Vec_dEig,nellip,6,val)
+                 do while(j<nrtol)
+                    call CoupleFSF(val) ! Fluid -> solid -> fluid coupling
                     if (val<rtol) then
                        if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,       &
                           &ES11.2E3)'),"Sub step",j+1,"converge",val,"<",rtol
@@ -651,7 +651,8 @@ contains
     else
        read(10,*)nellip,nsolid,nrect,nobs
     end if
-    if (nsolid>0 .and. nellip>nsolid) read(10,*)rtol ! Fluid-solid iteration
+    ! Fluid-solid iteration
+    if (nsolid>0 .and. nellip>nsolid) read(10,*)rtol,nrtol
     if (k==0) then
        allocate(ocoord(nobs,3))
        allocate(ellip(nellip,17),instress(nellip,6)); instress=f0
@@ -790,5 +791,28 @@ contains
     call EshDisp(vm,eigen,fderphi,tderpsi,u)
     print('(3(F0.8,1X))'), u
   end subroutine TestEshD4
+
+  ! Fluid -> solid -> fluid coupling [dEig] => [Eig],resid
+  subroutine CoupleFSF(resid)
+    implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#include "petsc.h"
+#endif
+    real(8) :: resid
+    call GetEigSec(Esec) ! Vec_dEig => Esec
+    if (rank==nprcs-1) then
+       Vsec=-matmul(Wsec,Esec) ! nsolid -> nfluid
+       call GetSecFvol(Vsec,Fvol) ! Vsec => Fvol
+       call VecSetValues(Vec_Fvol,nfluid*6,(/(i,i=0,nfluid*6-1)/),Fvol,        &
+          Insert_Values,ierr)
+    end if
+    call VecAssemblyBegin(Vec_Fvol,ierr)
+    call VecAssemblyEnd(Vec_Fvol,ierr)
+    call KSPSolve(KryVol,Vec_Fvol,Vec_Evol,ierr)
+    call Evol2Feig(mat(2),ellip)
+    call KSPSolve(KryFld,Vec_Feig,Vec_dEig,ierr)
+    call VecAXPY(Vec_Eig,f1,Vec_dEig,ierr)
+    call ConvergeL2(Vec_Eig,Vec_dEig,nellip,6,resid)
+  end subroutine CoupleFSF
 
 end program main
