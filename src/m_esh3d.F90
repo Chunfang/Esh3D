@@ -153,7 +153,8 @@ contains
        bbar=sqrt(a(1)**2+lambda)/sqrt(a(3)**2+lambda)
        dbar=sqrt(a(1)**2-a(3)**2)/sqrt(a(3)**2+lambda)
        Ifir(1)=f4*pi*a(1)*a(2)**2*(acosh(bbar)-dbar/bbar)/(a(1)**2-a(2)**2)**1.5
-       Ifir(2)=f2*pi*a(1)*a(2)**2*(-acosh(bbar)+dbar*bbar)/(a(1)**2-a(2)**2)**1.5
+       Ifir(2)=f2*pi*a(1)*a(2)**2*(-acosh(bbar)+dbar*bbar)/(a(1)**2-a(2)**2)** &
+               1.5
        Ifir(3)=Ifir(2)
        Isec(1,2)=(Ifir(2)-Ifir(1))/(a(1)**2-a(2)**2)
        Isec(1,3)=Isec(1,2)
@@ -197,11 +198,11 @@ contains
        Isec(3,1)=Isec(1,3)
        Isec(2,3)=(Ifir(3)-Ifir(2))/(a(2)**2-a(3)**2)
        Isec(3,2)=Isec(2,3)
-       Isec(1,1)=((f4*pi*product(a))/((a(1)**2+lambda)*del)-Isec(1,2)-          &
+       Isec(1,1)=((f4*pi*product(a))/((a(1)**2+lambda)*del)-Isec(1,2)-         &
                  Isec(1,3))/f3
-       Isec(2,2)=((f4*pi*product(a))/((a(2)**2+lambda)*del)-Isec(1,2)-          &
+       Isec(2,2)=((f4*pi*product(a))/((a(2)**2+lambda)*del)-Isec(1,2)-         &
                  Isec(2,3))/f3
-       Isec(3,3)=((f4*pi*product(a))/((a(3)**2+lambda)*del)-Isec(1,3)-          &
+       Isec(3,3)=((f4*pi*product(a))/((a(3)**2+lambda)*del)-Isec(1,3)-         &
                  Isec(2,3))/f3
     end if
 
@@ -385,6 +386,31 @@ contains
     end do
   end subroutine EshD4
 
+  ! Stage a1>=a2>=a3 and retruen rotation matrces
+  subroutine AxesSort(a,R,Rb)
+    implicit none
+    integer :: i,j
+    real(8) :: a(3),R1(3,3),R2(3,3),R3(3,3),R(3,3),Rb(3,3),exh(3,3),tmp,ang(3)
+    exh=f0; R=f0
+    do i=1,2
+       R(i,i)=f1
+       do j=2,3
+          if (a(i)<a(j)) then
+             exh(i,j)=f1
+             tmp=a(i); a(i)=a(j); a(j)=tmp
+          end if
+       end do
+    end do
+    ang=pi/f2*(/f0,f0,exh(1,2)/)
+    call Ang2Mat(ang,R1,f1)
+    ang=pi/f2*(/f0,exh(1,3),f0/)
+    call Ang2Mat(ang,R2,f1)
+    ang=pi/f2*(/exh(2,3),f0,f0/)
+    call Ang2Mat(ang,R3,f1)
+    R=matmul(R3,matmul(R2,R1))
+    Rb=transpose(R)
+  end subroutine AxesSort
+
   ! Eshelby's global coefficient matrix Keig(6*nellip,6*nellip)
   subroutine EshKeig(Em,vm,ellip,Keig,Kfluid)
     implicit none
@@ -393,8 +419,8 @@ contains
     integer :: i,j,k,l,nellip,nsolid
     real(8) :: Em,vm,ellip(:,:),Keig(:,:),S2(6,6),D4(3,3,3,3),D2(6,6),a(3),    &
        ang(3),R_init(3,3),Rb_init(3,3),R(3,3),Rb(3,3),R2(3,3),R2b(3,3),        &
-       exh(3,3),xobs(3),PIvec(3),Cm(6,6),Ch(6,6),S2g(6,6),D2g(6,6),fderphi(3), &
-       tderpsi(3,3,3),tmp
+       xobs(3),PIvec(3),Cm(6,6),Ch(6,6),S2g(6,6),D2g(6,6),fderphi(3),          &
+       tderpsi(3,3,3)
     fld=.false.
     if (present(Kfluid)) fld=Kfluid
     call CMat(Em,vm,Cm)
@@ -402,22 +428,7 @@ contains
     nsolid=size(pack(ellip(:,11),ellip(:,11)>f0),1)
     do i=1,nellip
        a=ellip(i,4:6)
-       ! Stage a1>=a2>=a3
-       exh=f0
-       do k=1,2
-          do l=2,3
-             if (a(k)<a(l)) then
-                exh(k,l)=f1
-                tmp=a(k)
-                a(k)=a(l)
-                a(l)=tmp
-             end if
-          end do
-       end do
-       ! Initial rotation matrices due to axis exchange
-       ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
-       call Ang2Mat(ang,R_init,f1)
-       call Ang2Mat(ang,Rb_init,-f1)
+       call AxesSort(a,R_init,Rb_init)
        ! Rotation matrices w.r.t the ellipsoid
        ang=ellip(i,7:9)
        call Ang2Mat(ang,R,f1)
@@ -438,22 +449,7 @@ contains
        do j=1,nellip
           if (j/=i) then
              a=ellip(j,4:6)
-             ! Stage a1>=a2>=a3
-             exh=f0
-             do k=1,2
-                do l=2,3
-                   if (a(k)<a(l)) then
-                      exh(k,l)=f1
-                      tmp=a(k)
-                      a(k)=a(l)
-                      a(l)=tmp
-                   end if
-                end do
-             end do
-             ! Initial rotation matrices due to axis exchange
-             ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
-             call Ang2Mat(ang,R_init,f1)
-             call Ang2Mat(ang,Rb_init,-f1)
+             call AxesSort(a,R_init,Rb_init)
              ! Rotation matrices w.r.t the ellipsoid
              ang=ellip(j,7:9)
              call Ang2Mat(ang,R,f1)
@@ -481,13 +477,13 @@ contains
   ! Non-interacting effective eigenstrains ->  EffEig(nellip,6)
   subroutine EshEffEig(Em,vm,instress,ellip,EffEig,init)
     implicit none
-    integer :: i,k,l,nellip,nsolid
+    integer :: i,nellip,nsolid
     logical,optional :: init
     logical :: initval
     real(8) :: instress(:,:),ellip(:,:),EffEig(:,:),Em,vm,Cm(6,6),Ch(6,6),     &
        strain(6),strain0(6),a(3),ang(3),R_init(3,3),Rb_init(3,3),R(3,3),       &
-       Rb(3,3),R2(3,3),R2b(3,3),exh(3,3),PIvec(3),Tstrain(3,3),Teigen(3,3),    &
-       CmInv(6,6),mat6(6,6),vec6(6),S2(6,6),tmp
+       Rb(3,3),R2(3,3),R2b(3,3),PIvec(3),Tstrain(3,3),Teigen(3,3),CmInv(6,6),  &
+       mat6(6,6),vec6(6),S2(6,6)
     if (present(init)) then
        initval=init
     else
@@ -504,22 +500,7 @@ contains
           Ch=f0
        end if
        a=ellip(i,4:6)
-       ! Stage a1>=a2>=a3
-       exh=f0
-       do k=1,2
-          do l=2,3
-             if (a(k)<a(l)) then
-                exh(k,l)=f1
-                tmp=a(k)
-                a(k)=a(l)
-                a(l)=tmp
-             end if
-          end do
-       end do
-       ! Initial rotation matrices due to axis exchange
-       ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
-       call Ang2Mat(ang,R_init,f1)
-       call Ang2Mat(ang,Rb_init,-f1)
+       call AxesSort(a,R_init,Rb_init)
        ! Rotation matrices w.r.t the ellipsoid
        ang=ellip(i,7:9)
        call Ang2Mat(ang,R,f1)
@@ -586,11 +567,10 @@ contains
   subroutine EshKvol(Em,vm,fluid,Kvol)
     implicit none
     integer :: i,j,k,l
-    real(8) :: Em,vm,fluid(:,:),Kvol(:,:),ang(3),a(3),tmp,exh(3,3),R_init(3,3),&
-       Rb_init(3,3),R(3,3),Rb(3,3),PIvec(3),Cm(6,6),Ch(6,6),S2(6,6),G2(6,6),   &
-       I6(6,6),R2(3,3),R2b(3,3),S2g(6,6),T2e(6,6),mat6(6,6),xobs(3),           &
-       D4(3,3,3,3),D2(6,6),D2g(6,6),fderphi(3),tderpsi(3,3,3),H2c(6,6),H2(6,6),&
-       E2(6,6)!,E2c(6,6)
+    real(8) :: Em,vm,fluid(:,:),Kvol(:,:),ang(3),a(3),R_init(3,3),Rb_init(3,3),&
+       R(3,3),Rb(3,3),PIvec(3),Cm(6,6),Ch(6,6),S2(6,6),G2(6,6),I6(6,6),R2(3,3),&
+       R2b(3,3),S2g(6,6),T2e(6,6),mat6(6,6),xobs(3),D4(3,3,3,3),D2(6,6),       &
+       D2g(6,6),fderphi(3),tderpsi(3,3,3),H2c(6,6),H2(6,6),E2(6,6),E2c(6,6)
     I6=f0
     do i=1,6
        I6(i,i)=f1
@@ -599,22 +579,7 @@ contains
     Kvol=f0
     do i=1,size(fluid,1)
        a=fluid(i,4:6)
-       ! Stage a1>=a2>=a3
-       exh=f0
-       do k=1,2
-          do l=2,3
-             if (a(k)<a(l)) then
-                exh(k,l)=f1
-                tmp=a(k)
-                a(k)=a(l)
-                a(l)=tmp
-             end if
-          end do
-       end do
-       ! Initial rotation matrices due to axis exchange
-       ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
-       call Ang2Mat(ang,R_init,f1)
-       call Ang2Mat(ang,Rb_init,-f1)
+       call AxesSort(a,R_init,Rb_init)
        ! Rotation matrices w.r.t the ellipsoid
        ang=fluid(i,7:9)
        call Ang2Mat(ang,R,f1)
@@ -629,8 +594,8 @@ contains
        call Matinv(Cm-matmul(Cm-Ch,S2g),mat6)
        G2=matmul(matmul(S2g-I6,mat6),Ch)
        H2c=matmul(matmul(S2g-I6,mat6),Cm-Ch)+I6
-       !call Matinv(Ch,E2c)
-       !E2c=matmul(E2c,Cm-Ch)
+       call Matinv(Ch,E2c)
+       E2c=matmul(E2c,Cm-Ch)
        k=(i-1)*6+1
        Kvol(k,      k:k+5)=sum(T2e(:3,:),dim=1)
        Kvol(k+1,    k:k+5)=G2(1,:)-G2(2,:)
@@ -639,22 +604,7 @@ contains
        do j=1,size(fluid,1)
           if (j/=i) then
              a=fluid(j,4:6)
-             ! Stage a1>=a2>=a3
-             exh=f0
-             do k=1,2
-                do l=2,3
-                   if (a(k)<a(l)) then
-                      exh(k,l)=f1
-                      tmp=a(k)
-                      a(k)=a(l)
-                      a(l)=tmp
-                   end if
-                end do
-             end do
-             ! Initial rotation matrices due to axis exchange
-             ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
-             call Ang2Mat(ang,R_init,f1)
-             call Ang2Mat(ang,Rb_init,-f1)
+             call AxesSort(a,R_init,Rb_init)
              ! Rotation matrices w.r.t the ellipsoid
              ang=fluid(j,7:9)
              call Ang2Mat(ang,R,f1)
@@ -676,10 +626,10 @@ contains
              call Cmat(f3*fluid(j,10)*(f1-f2*vm),vm,Ch)
              call Matinv(Cm-matmul(Cm-Ch,S2g),mat6)
              H2=matmul(matmul(matmul(H2c,D2g),mat6),Ch)
-             !E2=matmul(matmul(matmul(E2c,D2g),mat6),Ch)
+             E2=matmul(matmul(matmul(E2c,D2g),mat6),Ch)
              k=(i-1)*6+1; l=(j-1)*6+1
-             !E2=matmul(T2e,E2)
-             E2=matmul(T2e,H2)
+             E2=matmul(T2e,E2)
+             !E2=matmul(T2e,H2)
              Kvol(k,      l:l+5)=sum(E2(:3,:),dim=1)
              Kvol(k+1,    l:l+5)=H2(1,:)-H2(2,:)
              Kvol(k+2,    l:l+5)=H2(2,:)-H2(3,:)
@@ -695,9 +645,9 @@ contains
   subroutine EshWsec(Em,vm,ellip,Wsec)
     implicit none
     integer :: i,j,k,l,nfluid,nsolid
-    real(8) :: Em,vm,ellip(:,:),Wsec(:,:),ang(3),a(3),tmp,exh(3,3),R_init(3,3),&
-       Rb_init(3,3),R(3,3),Rb(3,3),PIvec(3),Cm(6,6),Ch(6,6),S2(6,6),I6(6,6),   &
-       R2(3,3),R2b(3,3),S2g(6,6),mat6(6,6),xobs(3),fderphi(3),tderpsi(3,3,3),  &
+    real(8) :: Em,vm,ellip(:,:),Wsec(:,:),ang(3),a(3),R_init(3,3),Rb_init(3,3),&
+       R(3,3),Rb(3,3),PIvec(3),Cm(6,6),Ch(6,6),S2(6,6),I6(6,6),R2(3,3),        &
+       R2b(3,3),S2g(6,6),mat6(6,6),xobs(3),fderphi(3),tderpsi(3,3,3),          &
        D4(3,3,3,3),D2(6,6),D2g(6,6),W2c(6,6),W2(6,6)
     I6=f0
     do i=1,6
@@ -709,22 +659,7 @@ contains
     nfluid=size(ellip,1)-nsolid
     do i=1,nfluid
        a=ellip(nsolid+i,4:6)
-       ! Stage a1>=a2>=a3
-       exh=f0
-       do k=1,2
-          do l=2,3
-             if (a(k)<a(l)) then
-                exh(k,l)=f1
-                tmp=a(k)
-                a(k)=a(l)
-                a(l)=tmp
-             end if
-          end do
-       end do
-       ! Initial rotation matrices due to axis exchange
-       ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
-       call Ang2Mat(ang,R_init,f1)
-       call Ang2Mat(ang,Rb_init,-f1)
+       call AxesSort(a,R_init,Rb_init)
        ! Rotation matrices w.r.t the ellipsoid
        ang=ellip(nsolid+i,7:9)
        call Ang2Mat(ang,R,f1)
@@ -739,22 +674,7 @@ contains
        W2c=matmul(matmul(S2g-I6,mat6),Cm-Ch)+I6
        do j=1,nsolid
           a=ellip(j,4:6)
-          ! Stage a1>=a2>=a3
-          exh=f0
-          do k=1,2
-             do l=2,3
-                if (a(k)<a(l)) then
-                   exh(k,l)=f1
-                   tmp=a(k)
-                   a(k)=a(l)
-                   a(l)=tmp
-                end if
-             end do
-          end do
-          ! Initial rotation matrices due to axis exchange
-          ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
-          call Ang2Mat(ang,R_init,f1)
-          call Ang2Mat(ang,Rb_init,-f1)
+          call AxesSort(a,R_init,Rb_init)
           ! Rotation matrices w.r.t the ellipsoid
           ang=ellip(j,7:9)
           call Ang2Mat(ang,R,f1)
@@ -814,76 +734,6 @@ contains
     end do
   end subroutine GetSecFvol
 
-  subroutine FluidPushBack(moduli,fluid,EigFld,einit)
-    implicit none
-    integer :: i,k,l
-    real(8) :: moduli(2),fluid(:,:),ang(3),a(3),tmp,exh(3,3),R_init(3,3),      &
-       Rb_init(3,3),R(3,3),Rb(3,3),PIvec(3),Cm(6,6),Ch(6,6),S2(6,6),G2(6,6),   &
-       I6(6,6),vec6(6),mat6(6,6),Teigen(3,3),EigFld(:),EpsV0,EpsV
-    real(8),optional :: einit(:)
-    ! LAPACK variables
-    real(8) :: mattmp0(3,3),mattmp1(3,3),vectmp(3)
-    I6=f0
-    do i=1,6
-       I6(i,i)=f1
-    end do
-    call CMat(moduli(1),moduli(2),Cm)
-    do i=1,size(fluid,1)
-       if (present(einit)) then
-          EpsV0=einit(i)
-       else
-          EpsV0=f0
-       end if
-       a=fluid(i,4:6)
-       ! Stage a1>=a2>=a3
-       exh=f0
-       do k=1,2
-          do l=2,3
-             if (a(k)<a(l)) then
-                exh(k,l)=f1
-                tmp=a(k)
-                a(k)=a(l)
-                a(l)=tmp
-             end if
-          end do
-       end do
-       ! Initial rotation matrices due to axis exchange
-       ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
-       call Ang2Mat(ang,R_init,f1)
-       call Ang2Mat(ang,Rb_init,-f1)
-       ! Rotation matrices w.r.t the ellipsoid
-       ang=fluid(i,7:9)
-       call Ang2Mat(ang,R,f1)
-       call Ang2Mat(ang,Rb,-f1)
-       ! Eshelby's tensor
-       call EshS2(moduli(2),a,S2,PIvec)
-       call Cmat(f3*fluid(i,10)*(f1-f2*moduli(2)),moduli(2),Ch)
-       call Matinv(Cm-matmul(Cm-Ch,S2),mat6)
-       G2=matmul(matmul(S2-I6,mat6),Ch)
-       call Vec2Mat(fluid(i,12:17),mattmp0)
-       ! Eigen values of eientstrain (LAPACK)
-       call EigValVec(mattmp0,mattmp1,vectmp)
-       EpsV=EpsV0-sum(vectmp) ! Volume strain
-       mattmp0=reshape((/f1,f1,f1,                                             &
-                         G2(1,1)-G2(2,1),G2(1,2)-G2(2,2),G2(1,3)-G2(2,3),      &
-                         G2(2,1)-G2(3,1),G2(2,2)-G2(3,2),G2(2,3)-G2(3,3)/),    &
-                         (/3,3/),(/f0,f0/),(/2,1/))
-       call MatInv(mattmp0,mattmp1)
-       vectmp=matmul(mattmp1,(/EpsV,f0,f0/))
-       vec6=(/vectmp(1),vectmp(2),vectmp(3),f0,f0,f0/)
-       ! Rotate back to original coordinate
-       call Vec2Mat(vec6,Teigen)
-       Teigen=matmul(matmul(matmul(R,Rb_init),Teigen),                         &
-                     transpose(matmul(R,Rb_init)))
-       ! Add to effective inclusions ellipeff
-       vec6=(/Teigen(1,1),Teigen(2,2),Teigen(3,3),Teigen(1,2),Teigen(2,3),     &
-          Teigen(1,3)/)
-       ! Set FeigFld
-       l=(i-1)*6+1
-       EigFld(l:l+5)=matmul(Ch,vec6)
-    end do
-  end subroutine FluidPushBack
-
   subroutine EshDisp(vm,eigen,fderphi,tderpsi,u)
     implicit none
     integer :: i,j,k
@@ -929,31 +779,16 @@ contains
     ! rotation angles around x,y and z axises, 10,11 inclusion Young's modulus
     ! and Poisson's ratio (not used), 12-17 eigen strain
     ! sol(nobs,9): 1-3 displacement, 4-9 stress
-    real(8) :: ang(3),a(3),tmp,exh(3,3),R_init(3,3),Rb_init(3,3),R(3,3),       &
-       Rb(3,3),PIvec(3),Tstress(3,3),Cm(6,6),stresst(6,1),eigent(6,1),         &
-       vert(3,1),D4(3,3,3,3),fderphi(3),tderpsi(3,3,3),disp(3),dispt(3,1),     &
-       Ttmp(3,3),Vtmp(6,1),Teigen(3,3),S2(6,6)
+    real(8) :: ang(3),a(3),R_init(3,3),Rb_init(3,3),R(3,3),Rb(3,3),PIvec(3),   &
+       Tstress(3,3),Cm(6,6),stresst(6,1),eigent(6,1),vert(3,1),D4(3,3,3,3),    &
+       fderphi(3),tderpsi(3,3,3),disp(3),dispt(3,1),Ttmp(3,3),Vtmp(6,1),       &
+       Teigen(3,3),S2(6,6)
     nobs=size(ocoord,1); nellip=size(ellip,1)
     !sol=f0 ! Initial solution space
     call CMat(Em,vm,Cm)
     do i=1,nellip
        a=ellip(i,4:6)
-       ! Stage a1>=a2>=a3
-       exh=f0
-       do k=1,2
-          do l=2,3
-             if (a(k)<a(l)) then
-                exh(k,l)=f1
-                tmp=a(k)
-                a(k)=a(l)
-                a(l)=tmp
-             end if
-          end do
-       end do
-       ! Initial rotation matrices due to axis exchange
-       ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
-       call Ang2Mat(ang,R_init,f1)
-       call Ang2Mat(ang,Rb_init,-f1)
+       call AxesSort(a,R_init,Rb_init)
        ! Rotation matrices w.r.t the ellipsoid
        ang=ellip(i,7:9)
        call Ang2Mat(ang,R,f1)
