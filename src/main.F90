@@ -19,6 +19,7 @@ program main
   logical :: l
   integer,pointer :: null_i=>null()
   real(8),pointer :: null_r=>null()
+  real(8) :: t1,t2
   integer :: n,i,j,j1,j2,n_incl,nodal_bw,incl_bw,status(MPI_STATUS_SIZE)
   integer,allocatable :: hit(:)
 
@@ -51,6 +52,7 @@ program main
      output_file=input_file
   end if
 
+  t1=MPI_Wtime()
   call PrintMsg("Reading input ...")
   call ReadParameters
 
@@ -284,7 +286,7 @@ program main
   end do
   close(10) ! End of input
 
-  ! Global linear system matrix for interactive inhomogeneities
+  ! Global linear system matrix for interacting inhomogeneities
   if (inho) then
      n=nellip*6
      incl_bw=n
@@ -372,7 +374,7 @@ program main
 
   ! Full space Eshelby's solution
   if (full) then
-     if (inho) then ! Interactive eigenstrain at inhomogeneity centroids
+     if (inho) then ! Interacting eigenstrain at inhomogeneity centroids
         do i=1,nellip
            instress(i,:)=rstress
         end do
@@ -419,6 +421,7 @@ program main
 
   ! Tuncated space involving numerical boundary condition solutions.
   elseif (half .or. fini) then
+     t2=MPI_Wtime(); if (rank==0) print'(F0.2,A)',t2-t1," seconds to assemble."
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
      if (rank==nprcs-1) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
      allocate(surfdat(ntrc_loc,18)); surfdat=f0
@@ -461,11 +464,14 @@ program main
         end do
         call VecAssemblyBegin(Vec_F,ierr)
         call VecAssemblyEnd(Vec_F,ierr)
+        t1=MPI_Wtime()
         call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+        t2=MPI_Wtime()
+        if (rank==0) print'(F0.2,A)',t2-t1," seconds to converge."
         call GetVec_U; uu0=uu
      end if
 
-     ! Interactive eigenstrain at inhomogeneity centroids, ellipeff(:,12:17)
+     ! Interacting eigenstrain at inhomogeneity centroids, ellipeff(:,12:17)
      if (inho) then
         ! Stress perturbation at inclusion centroids
         call GetObsNd("in")
@@ -556,11 +562,11 @@ program main
      call MPI_AllReduce(maxval(pack(resid,surf>0)),val,1,MPI_Real8,MPI_Max,    &
         MPI_Comm_World,ierr)
      if (val<tol) go to 8
-     if (rank==0) print('(A,X,ES11.2E3,X,A,X,ES11.2E3)'),                      &
-        "Step 0 residual traction",val,">",tol
+     if (rank==0) print('(A,X,ES11.2E3,X,A,X,ES11.2E3,A)'),                    &
+        "Step 0 residual traction",val,">",tol,", run correction ..."
      call MatchSurf ! Cancel residual traction/displacement
 
-     i=0 ! Half/finite space correction
+     i=0; t1=MPI_Wtime() ! Half/finite space correction
      do while(i<ntol)
         call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
         call GetVec_U
@@ -614,9 +620,11 @@ program main
         call MPI_AllReduce(maxval(pack(resid,surf>0)),val,1,MPI_Real8,MPI_Max, &
            MPI_Comm_World,ierr)
         if (val<tol) then
-           if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,ES11.2E3)'),       &
-               "Step",i+1,"converge",val,"<",tol
-           exit
+           t2=MPI_Wtime()
+           if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,ES11.2E3,X,A,X,    &
+              &F0.2,X,A)'),"Step",i+1,"converge",val,"<",tol,"at",t2-t1,       &
+              &"seconds."
+           go to 8
         else
            if (rank==0) print('(A,X,I0,X,A,X,ES11.2E3,X,A,X,ES11.2E3)'),       &
                "Step",i+1,"residual traction",val,">",tol
@@ -624,6 +632,8 @@ program main
         call MatchSurf
         i=i+1
      end do
+     t2=MPI_Wtime()
+     if (rank==0) print'(F0.2,A)',t2-t1," seconds to run correction."
 8    call ObsGather
      allocate(surfdat_glb(ntrc,18),surfnrm_glb(ntrc,3))
      call EshGather(surfdat,surfdat_glb)
