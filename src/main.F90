@@ -423,7 +423,8 @@ program main
   elseif (half .or. fini) then
      t2=MPI_Wtime(); if (rank==0) print'(F0.2,A)',t2-t1," seconds to assemble."
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     if (rank==nprcs-1) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
+     if (rank==nprcs-1) print'(I0,A,I0,A,I0,A)',j2-j1,"/",j2," DoFs across ",  &
+        nprcs," processors."
      allocate(surfdat(ntrc_loc,18)); surfdat=f0
 
      ! Find the topography thickness
