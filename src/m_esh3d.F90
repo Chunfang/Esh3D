@@ -112,33 +112,31 @@ contains
     implicit none
     integer :: i,j,k,l,q,p,r
     real(8) :: vm,a(3),x(3),D4(3,3,3,3),fderphi(3),tderpsi(3,3,3) ! In(out)put
-    real(8) :: a_21(3,3),a_22(3,3),coef(1:4,0:4),root(1:4),root_im2,root_im3,  &
-       lambda,theta,m,B,D,F,F_21(3,3),F_22(3,3),E,Ifir(3),Isec(3,3),del,bbar,  &
-       dbar,ultadelfir(3),ultadelfir_21(3,3),ultadelfir_22(3,3),               &
-       ultadelsec(3,3),fderlambda(3),fderlambda_21(3,3),c1,c2,c3,              &
-       fderlambda_22(3,3),diagvals(3,3),nondiagvals(3,3),fderc1(3),            &
-       fderc1_21(3,3),fderc1_22(3,3),fderF(3,3),sderc1(3,3),sderlambda(3,3),   &
-       fderIfir(3,3),sderF(3,3,3),zeefir(3),zeesec(3,3),sderIfir(3,3,3),       &
-       fderIsec(3,3,3),sderIsec(3,3,3,3),tderlambda(3,3,3),sderVfir(3,3,3),    &
-       tderVfir(3,3,3,3),sderphi(3,3),tderphi(3,3,3),foderpsi(3,3,3,3),        &
-       premult1,delta1,delta2,delta3,delta4,delta5,Fvec(3),fderc2(3),          &
-       fderc2_21(3,3),fderc2_22(3,3)
-    coef=f0
-    coef(3,3)=f1 ! coefficient of lambds**3 term
-    coef(3,2)=a(1)**2+a(2)**2+a(3)**2-(x(1)**2+x(2)**2+x(3)**2)
-    coef(3,1)=a(1)**2*a(2)**2+a(1)**2*a(3)**2+a(2)**2*a(3)**2-((a(2)**2+       &
-              a(3)**2)*x(1)**2+(a(1)**2+a(3)**2)*x(2)**2+(a(1)**2+a(2)**2)     &
-              *x(3)**2)
-    coef(3,0)=a(1)**2*a(2)**2*a(3)**2-(a(2)**2*a(3)**2*x(1)**2+a(1)**2*a(3)**2*&
-              x(2)**2+a(1)**2*a(2)**2*x(3)**2)
-    call Root_4(3,coef,root,root_im2,root_im3)
+    real(8) :: a_21(3,3),a_22(3,3),coef(0:3),lambda,theta,m,B,D,F,F_21(3,3),   &
+       F_22(3,3),E,Ifir(3),Isec(3,3),del,bbar,dbar,ultadelfir(3),              &
+       ultadelfir_21(3,3),ultadelfir_22(3,3),ultadelsec(3,3),fderlambda(3),    &
+       fderlambda_21(3,3),c1,c2,c3,fderlambda_22(3,3),diagvals(3,3),           &
+       nondiagvals(3,3),fderc1(3),fderc1_21(3,3),fderc1_22(3,3),fderF(3,3),    &
+       sderc1(3,3),sderlambda(3,3),fderIfir(3,3),sderF(3,3,3),zeefir(3),       &
+       zeesec(3,3),sderIfir(3,3,3),fderIsec(3,3,3),sderIsec(3,3,3,3),          &
+       tderlambda(3,3,3),sderVfir(3,3,3),tderVfir(3,3,3,3),sderphi(3,3),       &
+       tderphi(3,3,3),foderpsi(3,3,3,3),premult1,delta1,delta2,delta3,delta4,  &
+       delta5,Fvec(3),fderc2(3),fderc2_21(3,3),fderc2_22(3,3)
+    complex(8) :: rt(3)
     lambda=f0
     if (x(1)**2/a(1)**2+x(2)**2/a(2)**2+x(3)**2/a(3)**2>f1) then
-       if (root_im2==f0 .and. root_im3==f0) then
-          lambda=max(f0,maxval(root))
-       else
-          lambda=max(f0,root(3))
-       end if
+       coef=f0
+       coef(3)=f1 ! coefficient of lambds**3 term
+       coef(2)=a(1)**2+a(2)**2+a(3)**2-(x(1)**2+x(2)**2+x(3)**2)
+       coef(1)=a(1)**2*a(2)**2+a(1)**2*a(3)**2+a(2)**2*a(3)**2-((a(2)**2+      &
+               a(3)**2)*x(1)**2+(a(1)**2+a(3)**2)*x(2)**2+(a(1)**2+a(2)**2)    &
+               *x(3)**2)
+       coef(0)=a(1)**2*a(2)**2*a(3)**2-(a(2)**2*a(3)**2*x(1)**2+a(1)**2*a(3)** &
+               2*x(2)**2+a(1)**2*a(2)**2*x(3)**2)
+       call CubicRoots(coef(:3),rt)
+       do i=1,3
+          if (AIMAG(rt(i))==f0) lambda=max(lambda,dble(rt(i)))
+       end do
     end if
     theta=asin(sqrt((a(1)**2-a(3)**2)/(a(1)**2+lambda))) ! the amplitude
     m=(a(1)**2-a(2)**2)/(a(1)**2-a(3)**2) ! m=k**2 is the parameter
