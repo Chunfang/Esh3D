@@ -156,7 +156,7 @@ contains
     r(1)=a(2)*b(3)-a(3)*b(2)
     r(2)=a(3)*b(1)-a(1)*b(3)
     r(3)=a(1)*b(2)-a(2)*b(1)
-    m=(r(1)*c(1)+r(2)*c(2)+r(3)*c(3))/(r(1)*r(1)+r(2)*r(2)+r(3)*r(3))
+    m=(r(1)*c(1)+r(2)*c(2)+r(3)*c(3))/sqrt(r(1)*r(1)+r(2)*r(2)+r(3)*r(3))
   end subroutine Mix
 
   ! Translation matrix from global to face coordinate
@@ -366,8 +366,8 @@ contains
           xob(2)<=ymaxd)
        if (dmn>2) p_in_dom=(p_in_dom .and. xob(3)>=zmind .and. xob(3)<=zmaxd)
        if (p_in_dom) then ! Point probably in domain
+          p_in_el=.false.
           do el=1,nels
-             p_in_el=.false.
              enodes=nodes(el,:)
              ecoords=coords(enodes,:)
              xmin=minval(ecoords(:,1)); xmax=maxval(ecoords(:,1))
@@ -390,7 +390,9 @@ contains
                    call Mix(vec14,vec12,vec1o,df)
                    call Mix(vec24,vec23,vec2o,d)
                    ! Point in tet
-                   if (dd>=f0 .and. dl>=f0 .and. df>=f0 .and. d>=f0) then
+                   if ((dd>=f0 .and. dl>=f0 .and. df>=f0 .and. d>=f0) .or.     &
+                      minval(abs((/dd,dl,df,d/)))<EPSILON(f1)*minval((/xmax-   &
+                      xmin,ymax-ymin,zmax-zmin/))) then ! Mix dble Tol
                       call Mix(vec12,vec13,vec14,du)
                       call Mix(vec13,vec14,vec12,dr)
                       call Mix(vec14,vec12,vec13,db)
@@ -414,8 +416,10 @@ contains
                    call Mix(vec78,vec73,vec7o,db)
                    call Mix(vec73,vec76,vec7o,dr)
                    ! Point in hex
-                   if (dd>=f0 .and. dl>=f0 .and. df>=f0 .and. du>=f0 .and.     &
-                      dr>=f0 .and. db>=f0) then
+                   if ((dd>=f0 .and. dl>=f0 .and. df>=f0 .and. du>=f0 .and.    &
+                      dr>=f0 .and. db>=f0) .or. minval(abs((/dd,dl,df,du,dr,   &
+                      db/)))<EPSILON(f1)*minval((/xmax-xmin,ymax-ymin,         &
+                      zmax-zmin/))) then ! Mix dble Tol
                       eta=(dl-dr)/(dr+dl); nu=(df-db)/(df+db)
                       psi=(dd-du)/(dd+du)
                       N(1)=c*(f1-eta)*(f1-nu)*(f1-psi)
@@ -650,21 +654,21 @@ contains
     end do
   end subroutine GetEigSec
 
-  ! L2 covergence of a n*nelem vector Vect = Vect + dVect
-  subroutine ConvergeL2(Vect,dVect,n,nelem,conv)
+  ! L2 covergence of a nellip*nelem vector Vect = Vect + dVect
+  subroutine ConvergeL2(Vect,dVect,nelem,conv)
     implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
 #endif
-    integer :: i,j,j1,j2,n,nelem,idx(nelem)
+    integer :: i,j,j1,j2,nelem,idx(nelem)
     real(8) :: vec0(nelem),vec1(nelem),tmp,resid,conv
     Vec :: Vect,dVect
     call VecGetOwnershipRange(Vect,j1,j2,ierr)
     resid=f0
     do i=1,(j2-j1)/nelem
-       idx=j1+(/((i-1)*6+j-1,j=1,nelem)/)
-       call VecGetValues(Vect,6,idx,vec0,ierr)
-       call VecGetValues(dVect,6,idx,vec1,ierr)
+       idx=j1+(/((i-1)*nelem+j-1,j=1,nelem)/)
+       call VecGetValues(Vect,nelem,idx,vec0,ierr)
+       call VecGetValues(dVect,nelem,idx,vec1,ierr)
        tmp=sqrt(sum(vec0*vec0))
        if (tmp>0) then
           tmp=sqrt(sum(vec1*vec1))/tmp

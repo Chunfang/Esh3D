@@ -727,7 +727,8 @@ contains
     call MPI_Reduce(dattmp,buf,nobs*18,MPI_Real8,MPI_Sum,nprcs-1,              &
        MPI_Comm_World,ierr)
     ones=reshape(buf,(/nobs,18/))
-    if (rank==nprcs-1) odat_glb=odat_glb/max(ones,f1) ! Scale duplicates
+    if (rank==nprcs-1) odat_glb=odat_glb/ones ! Scale duplicates, NaN allowed
+    call MPI_Barrier(MPI_Comm_World,ierr) ! Prevent crash
   end subroutine ObsGather
 
   ! Gather 2D data by last rank
@@ -823,7 +824,7 @@ contains
     call Evol2Feig(mat(2),ellip)
     call KSPSolve(KryFld,Vec_Feig,Vec_dEig,ierr)
     call VecAXPY(Vec_Eig,f1,Vec_dEig,ierr)
-    call ConvergeL2(Vec_Eig,Vec_dEig,nellip,6,resid)
+    call ConvergeL2(Vec_Eig,Vec_dEig,6,resid)
   end subroutine CoupleFSF
 
 end program main
