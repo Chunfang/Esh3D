@@ -20,7 +20,7 @@ program main
   integer,pointer :: null_i=>null()
   real(8),pointer :: null_r=>null()
   real(8) :: t1,t2
-  integer :: n,i,j,j1,j2,n_incl,nodal_bw,incl_bw,status(MPI_STATUS_SIZE)
+  integer :: n,i,j,j1,j2,n_incl,nodal_bw,incl_bw,StatMPI(MPI_STATUS_SIZE)
   integer,allocatable :: hit(:)
 
   call PetscInitialize(Petsc_Null_Character,ierr)
@@ -746,13 +746,13 @@ contains
        if (rank==i) call MPI_Send(m*n,1,MPI_Integer,nprcs-1,1234+i,            &
                                   MPI_Comm_World,ierr)
        if (rank==nprcs-1) then
-          call MPI_Recv(n,1,MPI_Integer,i,1234+i,MPI_Comm_World,status,ierr)
+          call MPI_Recv(n,1,MPI_Integer,i,1234+i,MPI_Comm_World,StatMPI,ierr)
           allocate(buf(n))
        end if
        if (rank==i) call MPI_Send(reshape(dat2D,(/m*n,1/)),m*n,MPI_Real8,      &
                                   nprcs-1,1235+i,MPI_Comm_World,ierr)
        if (rank==nprcs-1) then
-          call MPI_Recv(buf,n,MPI_Real8,i,1235+i,MPI_Comm_World,status,ierr)
+          call MPI_Recv(buf,n,MPI_Real8,i,1235+i,MPI_Comm_World,StatMPI,ierr)
           n=n/ncol
           dest2D(j+1:j+n,:)=reshape(buf,(/n,ncol/))
           deallocate(buf)
