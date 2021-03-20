@@ -7,7 +7,7 @@ module global
 
   use local
   use HDF5
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
   implicit none
 #include "petscdef.h"
 #else
@@ -91,7 +91,7 @@ contains
 
   subroutine FormMatKfull
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: i
@@ -108,7 +108,7 @@ contains
   ! Apply nodal force
   subroutine ApplyNodalForce(node,vvec)
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: node,i,j
@@ -228,7 +228,7 @@ contains
   ! Form RHS to cancel residual traction/displacement surfdat, solfix -> Vec_F
   subroutine MatchSurf
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: i,el,j
@@ -274,7 +274,7 @@ contains
 
   subroutine GetVecFixC
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: i,j,j1
@@ -294,7 +294,7 @@ contains
   ! Modify RHS for fixed value boundary condition: Mat_Kfull,solfix->Vec_F
   subroutine FixBndVecF
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: i,j,j1
@@ -585,7 +585,7 @@ contains
   ! Intrinsic fluid eigenstrains to RHS [Evol] -> [Feig]
   subroutine Evol2Feig(vm,ellip)
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: i,j,j1,j2,idx(6)
@@ -611,7 +611,7 @@ contains
   ! Update interacting eiginstrain Vec_Eig -> ellipeff(12:17)
   subroutine UpInhoEigen(eigen,fluid)
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     logical,optional :: fluid
@@ -638,7 +638,7 @@ contains
   ! Vec_dEig -> Esec
   subroutine GetEigSec(Esec)
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: i,j,j1,j2,idx(6)
@@ -657,7 +657,7 @@ contains
   ! L2 covergence of a nellip*nelem vector Vect = Vect + dVect
   subroutine ConvergeL2(Vect,dVect,nelem,conv)
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: i,j,j1,j2,nelem,idx(nelem)
@@ -681,7 +681,7 @@ contains
   ! Evaluate inclusions stress changes uu (solok) -> instress(nellip,6)
   subroutine InStrEval(ok)
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: ii,i,j,row(eldof)

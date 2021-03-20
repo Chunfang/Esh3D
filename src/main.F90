@@ -7,7 +7,7 @@ program main
 
   use esh3d
   use global
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
   implicit none
 #include "petsc.h"
 #else
@@ -30,7 +30,7 @@ program main
 
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=6)
   call PetscOptionsGetString(Petsc_Null_Character,'-f',input_file,l,ierr)
-#elif (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR==7)
+#elif (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR==7 && PETSC_VERSION_SUBMINOR<5)
   call PetscOptionsGetString(Petsc_Null_Object, Petsc_Null_Character,'-f',     &
      input_file,l,ierr)
 #else
@@ -713,7 +713,7 @@ contains
   ! Gather obsdat by last rank
   subroutine ObsGather
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     real(8) :: dattmp(nobs*18),buf(nobs*18),ones(nobs,18)
@@ -734,7 +734,7 @@ contains
   ! Gather 2D data by last rank
   subroutine EshGather(dat2D,dest2D)
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: i,j,m,n,ncol
@@ -807,7 +807,7 @@ contains
   ! Fluid -> solid -> fluid coupling [dEig] => [Eig],resid
   subroutine CoupleFSF(resid)
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     real(8) :: resid
